@@ -25,7 +25,9 @@ set(SOURCES
     src/main.cpp
     src/core/logger.cpp
     src/features/feature_manager.cpp
+    src/features/vfs.cpp
     src/hooks/d3d9_hook.cpp
+    src/hooks/file_hook.cpp
     src/hooks/wndproc_hook.cpp
     src/ui/menu.cpp
 
@@ -47,10 +49,11 @@ set(SOURCES
 # Create 32-bit proxy DLL (dinput8.dll)
 add_library(dinput8 SHARED ${SOURCES} dinput8.def)
 
-# Link only essential Win32 system libraries (d3d9 is loaded dynamically from System32)
+# Link essential Win32 system libraries
 target_link_libraries(dinput8 PRIVATE
     user32
     gdi32
+    shell32
 )
 
 # Output name must be dinput8.dll

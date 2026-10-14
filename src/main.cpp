@@ -1,7 +1,10 @@
 #include <windows.h>
 #include "core/logger.h"
 #include "hooks/d3d9_hook.h"
+#include "hooks/file_hook.h"
 #include "features/feature_manager.h"
+#include "features/vfs.h"
+#include <MinHook.h>
 
 // Original DirectInput8Create function pointer
 using DirectInput8Create_t = HRESULT(WINAPI*)(HINSTANCE, DWORD, REFIID, LPVOID*, LPUNKNOWN);
@@ -34,8 +37,12 @@ extern "C" HRESULT WINAPI DirectInput8Create_Proxy(HINSTANCE hinst, DWORD dwVers
 DWORD WINAPI MainThread(LPVOID lpParam) {
     LOG_INFO("NBA 2K14 Hook background thread started.");
 
-    // Wait for the game's DirectX and main window to initialize
-    Sleep(1500);
+    // Initialize VFS and File Hooks early so all game archives can be redirected
+    Features::VFS::Get().Init();
+    Hooks::FileHook::Init();
+
+    // Brief delay to allow the game window and graphics subsystem to reach stable state
+    Sleep(1200);
 
     Features::FeatureManager::Get().Init();
 
@@ -54,12 +61,15 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
         DisableThreadLibraryCalls(hModule);
         Core::Logger::Init();
         LOG_INFO("DLL_PROCESS_ATTACH: Starting NBA 2K14 Native Hook...");
+        MH_Initialize();
         CreateThread(NULL, 0, MainThread, NULL, 0, NULL);
         break;
 
     case DLL_PROCESS_DETACH:
         LOG_INFO("DLL_PROCESS_DETACH: Cleaning up...");
+        Hooks::FileHook::Shutdown();
         Hooks::D3D9Hook::Shutdown();
+        MH_Uninitialize();
         Core::Logger::Shutdown();
         if (s_OriginalDInputModule) {
             FreeLibrary(s_OriginalDInputModule);

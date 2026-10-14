@@ -1,14 +1,17 @@
 #include "menu.h"
 #include "../features/feature_manager.h"
+#include "../features/vfs.h"
 #include "../core/logger.h"
 #include <imgui.h>
 #include <imgui_impl_dx9.h>
 #include <imgui_impl_win32.h>
 #include <string>
+#include <algorithm>
 
 namespace UI {
     bool Menu::s_Initialized = false;
     HWND Menu::s_Hwnd = nullptr;
+    static char s_ModSearchFilter[128] = "";
 
     void Menu::ApplyTheme() {
         ImGuiStyle& style = ImGui::GetStyle();
@@ -100,6 +103,7 @@ namespace UI {
 
     void Menu::Render() {
         auto& settings = Features::FeatureManager::Get().GetSettings();
+        auto& vfs = Features::VFS::Get();
 
         // 1. Watermark / Small HUD (Always visible)
         if (settings.showFpsOverlay) {
@@ -116,6 +120,10 @@ namespace UI {
                 ImGui::SameLine();
                 ImGui::Text("| %.1f FPS", io.Framerate);
                 ImGui::SameLine();
+                if (vfs.GetModCount() > 0) {
+                    ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.4f, 1.0f), "| %zu Mods Active", vfs.GetModCount());
+                    ImGui::SameLine();
+                }
                 ImGui::TextDisabled("| [F8] Menu");
                 ImGui::End();
             }
@@ -124,7 +132,7 @@ namespace UI {
         // 2. Main Menu Window (Toggled via F8 or Insert)
         if (!settings.showMenu) return;
 
-        ImGui::SetNextWindowSize(ImVec2(680, 480), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(720, 520), ImGuiCond_FirstUseEver);
         if (ImGui::Begin("NBA 2K14 Feature Hook", &settings.showMenu, ImGuiWindowFlags_NoCollapse)) {
             if (ImGui::BeginTabBar("MainTabs")) {
                 
@@ -139,7 +147,7 @@ namespace UI {
                     ImGui::Columns(2, "dash_cols", false);
                     ImGui::Text("Hook Status:");
                     ImGui::NextColumn();
-                    ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.3f, 1.0f), "ACTIVE (DirectX 9 Hooked)");
+                    ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.3f, 1.0f), "ACTIVE (DirectX 9Ex Hooked)");
                     ImGui::NextColumn();
 
                     ImGui::Text("Executable:");
@@ -147,14 +155,18 @@ namespace UI {
                     ImGui::Text("nba2k14.exe (Base: 0x00400000)");
                     ImGui::NextColumn();
 
+                    ImGui::Text("Virtual File System (VFS):");
+                    ImGui::NextColumn();
+                    if (vfs.IsEnabled()) {
+                        ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.3f, 1.0f), "ONLINE (%zu active files, %zu redirected)", vfs.GetModCount(), vfs.GetTotalRedirections());
+                    } else {
+                        ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "DISABLED");
+                    }
+                    ImGui::NextColumn();
+
                     ImGui::Text("Toggle Hotkey:");
                     ImGui::NextColumn();
                     ImGui::Text("F8 / Insert");
-                    ImGui::NextColumn();
-
-                    ImGui::Text("Virtual File System (VFS):");
-                    ImGui::NextColumn();
-                    ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.3f, 1.0f), "Active (loading from /mods/)");
                     ImGui::Columns(1);
 
                     ImGui::Spacing();
@@ -211,18 +223,78 @@ namespace UI {
                 // Tab: Mods (Virtual File System)
                 if (ImGui::BeginTabItem("Mods (VFS)")) {
                     ImGui::Spacing();
-                    ImGui::TextColored(ImVec4(0.2f, 0.7f, 1.0f, 1.0f), "Virtual File System Loader");
-                    ImGui::TextWrapped("Place loose .iff or texture files inside the 'mods/' folder. The hook intercepts file loading at runtime so you don't have to touch vanilla archives.");
+                    ImGui::TextColored(ImVec4(0.2f, 0.7f, 1.0f, 1.0f), "Virtual File System (VFS) Mod Loader");
+                    ImGui::TextWrapped("Drop loose .iff, .bin, or audio files into the 'mods/' folder. The VFS transparently redirects file-open calls at runtime so vanilla archives never need to be unpacked or modified.");
                     ImGui::Separator();
                     ImGui::Spacing();
 
-                    ImGui::Checkbox("Enable /mods/ Folder Override", &settings.vfsEnabled);
-                    if (ImGui::Button("Rescan Mods Folder")) {
-                        LOG_INFO("Rescanning mods folder...");
+                    bool vfsEnabled = vfs.IsEnabled();
+                    if (ImGui::Checkbox("Enable /mods/ Folder Redirection", &vfsEnabled)) {
+                        vfs.SetEnabled(vfsEnabled);
+                    }
+
+                    ImGui::SameLine();
+                    if (ImGui::Button("Open Mods Folder")) {
+                        vfs.OpenFolderInExplorer();
+                    }
+
+                    ImGui::SameLine();
+                    if (ImGui::Button("Rescan Folder")) {
+                        vfs.Rescan();
                     }
 
                     ImGui::Spacing();
-                    ImGui::TextDisabled("Mods Directory: <GameRoot>/mods/");
+                    ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "Active Mods: %zu  |  Total Redirections: %zu", vfs.GetModCount(), vfs.GetTotalRedirections());
+                    ImGui::TextDisabled("Location: %s", vfs.GetModsDirectory().c_str());
+                    ImGui::Spacing();
+
+                    const auto& modList = vfs.GetLoadedMods();
+                    if (modList.empty()) {
+                        ImGui::BeginChild("EmptyModsBox", ImVec2(0, 150), true);
+                        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "No loose mod files found in /mods/ yet!");
+                        ImGui::Spacing();
+                        ImGui::BulletText("Click 'Open Mods Folder' above.");
+                        ImGui::BulletText("Drop any modded files (e.g. cyberfaces, jerseys, courts) inside.");
+                        ImGui::BulletText("Click 'Rescan Folder' to register them immediately.");
+                        ImGui::EndChild();
+                    } else {
+                        ImGui::InputTextWithHint("##ModSearch", "Filter by filename...", s_ModSearchFilter, sizeof(s_ModSearchFilter));
+                        ImGui::Spacing();
+
+                        if (ImGui::BeginTable("ModsTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY, ImVec2(0, 200))) {
+                            ImGui::TableSetupColumn("File Name", ImGuiTableColumnFlags_WidthStretch);
+                            ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed, 90.0f);
+                            ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+                            ImGui::TableHeadersRow();
+
+                            std::string searchLower = s_ModSearchFilter;
+                            std::transform(searchLower.begin(), searchLower.end(), searchLower.begin(), ::tolower);
+
+                            for (const auto& mod : modList) {
+                                std::string fnLower = mod.filename;
+                                std::transform(fnLower.begin(), fnLower.end(), fnLower.begin(), ::tolower);
+
+                                if (!searchLower.empty() && fnLower.find(searchLower) == std::string::npos) {
+                                    continue;
+                                }
+
+                                ImGui::TableNextRow();
+                                ImGui::TableSetColumnIndex(0);
+                                ImGui::Text("%s", mod.relativePath.c_str());
+
+                                ImGui::TableSetColumnIndex(1);
+                                if (mod.fileSize >= 1024 * 1024) {
+                                    ImGui::Text("%.2f MB", (float)mod.fileSize / (1024.0f * 1024.0f));
+                                } else {
+                                    ImGui::Text("%.1f KB", (float)mod.fileSize / 1024.0f);
+                                }
+
+                                ImGui::TableSetColumnIndex(2);
+                                ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.3f, 1.0f), "Redirecting");
+                            }
+                            ImGui::EndTable();
+                        }
+                    }
 
                     ImGui::EndTabItem();
                 }
@@ -230,10 +302,11 @@ namespace UI {
                 // Tab: About
                 if (ImGui::BeginTabItem("About")) {
                     ImGui::Spacing();
-                    ImGui::TextColored(ImVec4(0.2f, 0.7f, 1.0f, 1.0f), "NBA 2K14 Native Hook v1.0");
+                    ImGui::TextColored(ImVec4(0.2f, 0.7f, 1.0f, 1.0f), "NBA 2K14 Native Hook v1.1");
                     ImGui::Text("Developed for high-performance in-game feature injection and modding.");
                     ImGui::Separator();
-                    ImGui::BulletText("Direct3D 9 EndScene & Reset Detours");
+                    ImGui::BulletText("Direct3D 9Ex EndScene & Reset Detours");
+                    ImGui::BulletText("Virtual File System (VFS) with O(1) Cache");
                     ImGui::BulletText("Dear ImGui 1.90+ Integration");
                     ImGui::BulletText("MinHook Trampoline Disassembler Engine");
                     ImGui::BulletText("DirectInput 8 System Proxy Interceptor");
