@@ -7,10 +7,13 @@
 #include <imgui_impl_win32.h>
 #include <string>
 #include <algorithm>
+#include <chrono>
 
 namespace UI {
     bool Menu::s_Initialized = false;
     HWND Menu::s_Hwnd = nullptr;
+    static std::chrono::steady_clock::time_point s_BootTime;
+    static bool s_BootTimeRecorded = false;
     static char s_ModSearchFilter[128] = "";
     static int s_TargetingModIndex = -1;
     static int s_SelectedTeamIdx = 0;
@@ -89,6 +92,8 @@ namespace UI {
 
         ApplyTheme();
 
+        s_BootTime = std::chrono::steady_clock::now();
+        s_BootTimeRecorded = true;
         s_Initialized = true;
         LOG_INFO("ImGui Menu successfully initialized.");
     }
@@ -116,10 +121,41 @@ namespace UI {
         auto& settings = Features::FeatureManager::Get().GetSettings();
         auto& vfs = Features::VFS::Get();
 
-        // 1. Watermark / Small HUD (Always visible)
-        if (settings.showFpsOverlay) {
+        if (!s_BootTimeRecorded) {
+            s_BootTime = std::chrono::steady_clock::now();
+            s_BootTimeRecorded = true;
+        }
+
+        // 1. Watermark / Small HUD
+        // If showFpsOverlay is checked: permanently visible.
+        // If showFpsOverlay is unchecked: visible for 2.0s on game boot, then smoothly fades out over 0.8s.
+        float watermarkAlpha = 1.0f;
+        bool shouldRenderWatermark = settings.showFpsOverlay;
+
+        if (!shouldRenderWatermark) {
+            auto now = std::chrono::steady_clock::now();
+            float elapsedSec = std::chrono::duration<float>(now - s_BootTime).count();
+            const float holdSec = 2.0f;
+            const float fadeSec = 0.8f;
+
+            if (elapsedSec < holdSec) {
+                shouldRenderWatermark = true;
+                watermarkAlpha = 1.0f;
+            } else if (elapsedSec < holdSec + fadeSec) {
+                shouldRenderWatermark = true;
+                watermarkAlpha = 1.0f - ((elapsedSec - holdSec) / fadeSec);
+                if (watermarkAlpha < 0.0f) watermarkAlpha = 0.0f;
+                if (watermarkAlpha > 1.0f) watermarkAlpha = 1.0f;
+            } else {
+                shouldRenderWatermark = false;
+            }
+        }
+
+        if (shouldRenderWatermark && watermarkAlpha > 0.001f) {
             ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Always);
             ImGui::SetNextWindowBgAlpha(0.60f);
+            ImGui::PushStyleVar(ImGuiStyleVar_Alpha, watermarkAlpha);
+
             ImGuiWindowFlags hudFlags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
                                         ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
                                         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
@@ -138,6 +174,8 @@ namespace UI {
                 ImGui::TextDisabled("| [F8] Menu");
                 ImGui::End();
             }
+
+            ImGui::PopStyleVar();
         }
 
         // 2. Main Menu Window (Toggled via F8 or Insert)
@@ -183,7 +221,12 @@ namespace UI {
 
                     ImGui::Spacing();
                     ImGui::Separator();
-                    ImGui::Checkbox("Show FPS & Status Overlay", &settings.showFpsOverlay);
+                    if (ImGui::Checkbox("Show FPS & Status Overlay", &settings.showFpsOverlay)) {
+                        Features::FeatureManager::Get().SaveConfig();
+                    }
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip("When unchecked, the overlay only appears for 2 seconds on game startup then fades away.");
+                    }
 
                     ImGui::EndTabItem();
                 }

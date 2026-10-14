@@ -1,4 +1,5 @@
 #pragma once
+#include <string>
 
 namespace Features {
     struct Settings {
@@ -29,10 +30,13 @@ namespace Features {
 
         void Init();
         void Update();
+        void LoadConfig();
+        void SaveConfig();
         Settings& GetSettings() { return m_Settings; }
 
     private:
         FeatureManager() = default;
         Settings m_Settings;
+        std::string m_ConfigPath;
     };
 }
