@@ -28,6 +28,7 @@ namespace Features {
 
         m_ModsDirectory = dir + "\\mods";
         m_ConfigFile = m_ModsDirectory + "\\disabled_mods.txt";
+        m_TargetsConfigFile = m_ModsDirectory + "\\mod_targets.txt";
 
         // Create mods directory if it doesn't exist
         DWORD attrib = GetFileAttributesA(m_ModsDirectory.c_str());
@@ -41,42 +42,85 @@ namespace Features {
     }
 
     void VFS::LoadConfig() {
+        // 1. Load disabled mods
         m_DisabledFilenames.clear();
         std::ifstream inFile(m_ConfigFile);
-        if (!inFile.is_open()) return;
+        if (inFile.is_open()) {
+            std::string line;
+            while (std::getline(inFile, line)) {
+                size_t start = line.find_first_not_of(" \t\r\n");
+                size_t end = line.find_last_not_of(" \t\r\n");
+                if (start == std::string::npos) continue;
+                std::string clean = line.substr(start, end - start + 1);
 
-        std::string line;
-        while (std::getline(inFile, line)) {
-            // Trim whitespace
-            size_t start = line.find_first_not_of(" \t\r\n");
-            size_t end = line.find_last_not_of(" \t\r\n");
-            if (start == std::string::npos) continue;
-            std::string clean = line.substr(start, end - start + 1);
-
-            if (clean.empty() || clean[0] == '#') continue;
-            std::replace(clean.begin(), clean.end(), '\\', '/');
-            m_DisabledFilenames.insert(ToLower(clean));
+                if (clean.empty() || clean[0] == '#') continue;
+                std::replace(clean.begin(), clean.end(), '\\', '/');
+                m_DisabledFilenames.insert(ToLower(clean));
+            }
+            LOG_INFO("[VFS] Loaded %zu disabled mod entries from config.", m_DisabledFilenames.size());
         }
 
-        LOG_INFO("[VFS] Loaded %zu disabled mod entries from config.", m_DisabledFilenames.size());
+        // 2. Load custom target mappings
+        m_CustomTargets.clear();
+        std::ifstream tFile(m_TargetsConfigFile);
+        if (tFile.is_open()) {
+            std::string line;
+            while (std::getline(tFile, line)) {
+                size_t start = line.find_first_not_of(" \t\r\n");
+                size_t end = line.find_last_not_of(" \t\r\n");
+                if (start == std::string::npos) continue;
+                std::string clean = line.substr(start, end - start + 1);
+                if (clean.empty() || clean[0] == '#') continue;
+
+                size_t eqPos = clean.find('=');
+                if (eqPos != std::string::npos) {
+                    std::string src = clean.substr(0, eqPos);
+                    std::string dst = clean.substr(eqPos + 1);
+
+                    size_t s1 = src.find_first_not_of(" \t\r\n");
+                    size_t e1 = src.find_last_not_of(" \t\r\n");
+                    size_t s2 = dst.find_first_not_of(" \t\r\n");
+                    size_t e2 = dst.find_last_not_of(" \t\r\n");
+
+                    if (s1 != std::string::npos && s2 != std::string::npos) {
+                        std::string cleanSrc = ToLower(src.substr(s1, e1 - s1 + 1));
+                        std::string cleanDst = ToLower(dst.substr(s2, e2 - s2 + 1));
+                        std::replace(cleanSrc.begin(), cleanSrc.end(), '\\', '/');
+                        m_CustomTargets[cleanSrc] = cleanDst;
+                    }
+                }
+            }
+            LOG_INFO("[VFS] Loaded %zu custom target mappings from config.", m_CustomTargets.size());
+        }
     }
 
     void VFS::SaveConfig() {
+        // 1. Save disabled mods
         std::ofstream outFile(m_ConfigFile, std::ios::out | std::ios::trunc);
-        if (!outFile.is_open()) {
-            LOG_ERROR("[VFS] Failed to open %s for writing!", m_ConfigFile.c_str());
-            return;
-        }
+        if (outFile.is_open()) {
+            outFile << "# NBA 2K14 VFS Disabled Mods Configuration" << "\n";
+            outFile << "# Files or relative paths listed here are disabled and will fallback to vanilla." << "\n\n";
 
-        outFile << "# NBA 2K14 VFS Disabled Mods Configuration" << "\n";
-        outFile << "# Files or relative paths listed here are disabled and will fallback to vanilla." << "\n\n";
-
-        for (const auto& mod : m_ModList) {
-            if (!mod.enabled) {
-                outFile << ToLower(mod.relativePath) << "\n";
+            for (const auto& mod : m_ModList) {
+                if (!mod.enabled) {
+                    outFile << ToLower(mod.relativePath) << "\n";
+                }
             }
+            outFile.flush();
         }
-        outFile.flush();
+
+        // 2. Save custom target mappings
+        std::ofstream tOut(m_TargetsConfigFile, std::ios::out | std::ios::trunc);
+        if (tOut.is_open()) {
+            tOut << "# NBA 2K14 VFS Custom Mod Target Mappings\n";
+            tOut << "# Format: source_mod_file = target_game_slot\n\n";
+            for (const auto& mod : m_ModList) {
+                if (!mod.targetFile.empty()) {
+                    tOut << ToLower(mod.relativePath) << " = " << ToLower(mod.targetFile) << "\n";
+                }
+            }
+            tOut.flush();
+        }
     }
 
     static const std::unordered_map<int, std::string> s_TeamNames = {
@@ -148,7 +192,8 @@ namespace Features {
     };
 
     void VFS::ClassifyMod(ModFileInfo& info) {
-        std::string fn = ToLower(info.filename);
+        std::string inspectName = !info.targetFile.empty() ? info.targetFile : info.filename;
+        std::string fn = ToLower(inspectName);
         std::string folder = ToLower(info.folderName);
 
         auto getDigits = [](const std::string& str, size_t startPos, size_t& len) -> int {
@@ -410,8 +455,16 @@ namespace Features {
                                  (m_DisabledFilenames.find(relPathLower) == m_DisabledFilenames.end()) &&
                                  (subDir.empty() || m_DisabledFilenames.find(folderLower) == m_DisabledFilenames.end());
 
-                size_t index = m_ModList.size();
-                m_ModIndexMap[filenameLower].push_back(index);
+                std::string targetFile = "";
+                auto itT = m_CustomTargets.find(relPathLower);
+                if (itT != m_CustomTargets.end()) {
+                    targetFile = itT->second;
+                } else {
+                    itT = m_CustomTargets.find(filenameLower);
+                    if (itT != m_CustomTargets.end()) {
+                        targetFile = itT->second;
+                    }
+                }
 
                 ModFileInfo info;
                 info.filename = fd.cFileName;
@@ -420,14 +473,15 @@ namespace Features {
                 info.folderName = subDir;
                 info.fileSize = fileSize;
                 info.enabled = isEnabled;
+                info.targetFile = targetFile;
 
                 ClassifyMod(info);
 
                 m_ModList.push_back(info);
 
-                LOG_INFO("[VFS] Registered mod file: %s -> [%s / %s / %s] (enabled: %s, size: %llu bytes)",
+                LOG_INFO("[VFS] Registered mod file: %s -> [%s / %s / %s] (target: '%s', enabled: %s, size: %llu bytes)",
                     relPath.c_str(), info.categoryName.c_str(), info.subGroupName.c_str(), info.assetTypeName.c_str(),
-                    isEnabled ? "YES" : "NO", fileSize);
+                    targetFile.c_str(), isEnabled ? "YES" : "NO", fileSize);
             }
         } while (FindNextFileA(hFind, &fd));
 
@@ -436,10 +490,10 @@ namespace Features {
 
     void VFS::Rescan() {
         std::lock_guard<std::mutex> lock(m_Mutex);
-        m_ModIndexMap.clear();
         m_ModList.clear();
 
         ScanDirectoryRecursive(m_ModsDirectory, "");
+        RebuildIndexMap();
 
         LOG_INFO("[VFS] Rescan complete. Total mod files: %zu (Active: %zu)",
             m_ModList.size(), GetEnabledModCount());
@@ -601,6 +655,89 @@ namespace Features {
         }
 
         return result;
+    }
+
+    void VFS::RebuildIndexMap() {
+        m_ModIndexMap.clear();
+        for (size_t i = 0; i < m_ModList.size(); i++) {
+            std::string key = !m_ModList[i].targetFile.empty() ? ToLower(m_ModList[i].targetFile) : ToLower(m_ModList[i].filename);
+            m_ModIndexMap[key].push_back(i);
+        }
+    }
+
+    void VFS::SetModTarget(size_t index, const std::string& targetFilename) {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        if (index >= m_ModList.size()) return;
+
+        std::string cleanTarget = targetFilename;
+        size_t s = cleanTarget.find_first_not_of(" \t\r\n");
+        size_t e = cleanTarget.find_last_not_of(" \t\r\n");
+        if (s != std::string::npos) {
+            cleanTarget = cleanTarget.substr(s, e - s + 1);
+        } else {
+            cleanTarget = "";
+        }
+
+        m_ModList[index].targetFile = cleanTarget;
+        std::string relLower = ToLower(m_ModList[index].relativePath);
+        std::string fnLower = ToLower(m_ModList[index].filename);
+        if (!cleanTarget.empty()) {
+            m_CustomTargets[relLower] = cleanTarget;
+            m_CustomTargets[fnLower] = cleanTarget;
+        } else {
+            m_CustomTargets.erase(relLower);
+            m_CustomTargets.erase(fnLower);
+        }
+
+        ClassifyMod(m_ModList[index]);
+        RebuildIndexMap();
+        SaveConfig();
+        LOG_INFO("[VFS] Mod '%s' mapped to target: '%s'", m_ModList[index].relativePath.c_str(), cleanTarget.c_str());
+    }
+
+    void VFS::ClearModTarget(size_t index) {
+        SetModTarget(index, "");
+    }
+
+    std::vector<TeamPreset> VFS::GetTeamPresets() {
+        std::vector<TeamPreset> presets;
+        for (const auto& pair : s_TeamNames) {
+            int id = pair.first;
+            TeamPreset tp;
+            tp.teamId = id;
+            tp.teamName = pair.second;
+
+            char buf[32];
+            sprintf_s(buf, "f%03d.iff", id);
+            tp.slots.push_back({ std::string("Floor / Court (") + buf + ")", buf });
+            sprintf_s(buf, "s%03d.iff", id);
+            tp.slots.push_back({ std::string("Stadium & Arena 3D (") + buf + ")", buf });
+            sprintf_s(buf, "uh%03d.iff", id);
+            tp.slots.push_back({ std::string("Home Uniform (") + buf + ")", buf });
+            sprintf_s(buf, "ua%03d.iff", id);
+            tp.slots.push_back({ std::string("Away Uniform (") + buf + ")", buf });
+            sprintf_s(buf, "ux%03d.iff", id);
+            tp.slots.push_back({ std::string("Alternate Uniform (") + buf + ")", buf });
+            sprintf_s(buf, "r%03d.iff", id);
+            tp.slots.push_back({ std::string("Retro Uniform (") + buf + ")", buf });
+            sprintf_s(buf, "dorna%03d.iff", id);
+            tp.slots.push_back({ std::string("Court Dornas / Ads (") + buf + ")", buf });
+            sprintf_s(buf, "crowd%03d.iff", id);
+            tp.slots.push_back({ std::string("Arena Crowd (") + buf + ")", buf });
+            sprintf_s(buf, "logo%03d.iff", id);
+            tp.slots.push_back({ std::string("Team Logo (") + buf + ")", buf });
+
+            presets.push_back(tp);
+        }
+
+        std::sort(presets.begin(), presets.end(), [](const TeamPreset& a, const TeamPreset& b) {
+            if ((a.teamId < 100) != (b.teamId < 100)) {
+                return a.teamId < b.teamId;
+            }
+            return a.teamName < b.teamName;
+        });
+
+        return presets;
     }
 
     void VFS::EnableAllMods() {

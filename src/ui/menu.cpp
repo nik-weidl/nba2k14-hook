@@ -12,6 +12,11 @@ namespace UI {
     bool Menu::s_Initialized = false;
     HWND Menu::s_Hwnd = nullptr;
     static char s_ModSearchFilter[128] = "";
+    static int s_TargetingModIndex = -1;
+    static int s_SelectedTeamIdx = 0;
+    static int s_SelectedSlotIdx = 0;
+    static char s_CustomTargetInput[64] = "";
+    static bool s_OpenTargetModal = false;
 
     static std::string ToLower(const std::string& str) {
         std::string lower = str;
@@ -390,12 +395,13 @@ namespace UI {
                                         if (ImGui::TreeNodeEx(subName.c_str(), ImGuiTreeNodeFlags_DefaultOpen, "%s", subTitle.c_str())) {
                                             
                                             // Subgroup Table
-                                            if (ImGui::BeginTable("SubTable", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+                                            if (ImGui::BeginTable("SubTable", 6, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
                                                 ImGui::TableSetupColumn("Active", ImGuiTableColumnFlags_WidthFixed, 45.0f);
                                                 ImGui::TableSetupColumn("File Name", ImGuiTableColumnFlags_WidthStretch);
-                                                ImGui::TableSetupColumn("Asset Type", ImGuiTableColumnFlags_WidthFixed, 140.0f);
-                                                ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed, 80.0f);
-                                                ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+                                                ImGui::TableSetupColumn("Asset Type", ImGuiTableColumnFlags_WidthFixed, 130.0f);
+                                                ImGui::TableSetupColumn("Target Slot", ImGuiTableColumnFlags_WidthFixed, 120.0f);
+                                                ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed, 75.0f);
+                                                ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed, 130.0f);
                                                 ImGui::TableHeadersRow();
 
                                                 for (size_t modIdx : indices) {
@@ -424,23 +430,41 @@ namespace UI {
                                                     ImGui::TableSetColumnIndex(2);
                                                     ImGui::TextColored(ImVec4(0.3f, 0.8f, 1.0f, 1.0f), "%s", mod.assetTypeName.c_str());
 
-                                                    // Column 3: File Size
+                                                    // Column 3: Target Slot
                                                     ImGui::TableSetColumnIndex(3);
+                                                    if (!mod.targetFile.empty()) {
+                                                        ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.4f, 1.0f), "-> %s", mod.targetFile.c_str());
+                                                    } else {
+                                                        ImGui::TextDisabled("Default");
+                                                    }
+
+                                                    // Column 4: File Size
+                                                    ImGui::TableSetColumnIndex(4);
                                                     if (mod.fileSize >= 1024 * 1024) {
                                                         ImGui::Text("%.2f MB", (float)mod.fileSize / (1024.0f * 1024.0f));
                                                     } else {
                                                         ImGui::Text("%.1f KB", (float)mod.fileSize / 1024.0f);
                                                     }
 
-                                                    // Column 4: Status
-                                                    ImGui::TableSetColumnIndex(4);
-                                                    if (mod.enabled && vfs.IsEnabled()) {
-                                                        ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.3f, 1.0f), "Redirecting");
-                                                    } else if (!vfs.IsEnabled()) {
-                                                        ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "VFS Off");
+                                                    // Column 5: Actions
+                                                    ImGui::TableSetColumnIndex(5);
+                                                    ImGui::PushID((int)(20000 + modIdx));
+                                                    if (!mod.targetFile.empty()) {
+                                                        if (ImGui::SmallButton("Change")) {
+                                                            s_TargetingModIndex = (int)modIdx;
+                                                            s_OpenTargetModal = true;
+                                                        }
+                                                        ImGui::SameLine();
+                                                        if (ImGui::SmallButton("Clear")) {
+                                                            vfs.ClearModTarget(modIdx);
+                                                        }
                                                     } else {
-                                                        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Disabled");
+                                                        if (ImGui::SmallButton("Target...")) {
+                                                            s_TargetingModIndex = (int)modIdx;
+                                                            s_OpenTargetModal = true;
+                                                        }
                                                     }
+                                                    ImGui::PopID();
                                                 }
                                                 ImGui::EndTable();
                                             }
@@ -460,12 +484,13 @@ namespace UI {
                             ImGui::EndChild();
                         } else {
                             // --- FLAT TABLE VIEW ---
-                            if (ImGui::BeginTable("ModsTable", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY, ImVec2(0, 270))) {
+                            if (ImGui::BeginTable("ModsTable", 6, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY, ImVec2(0, 270))) {
                                 ImGui::TableSetupColumn("Active", ImGuiTableColumnFlags_WidthFixed, 45.0f);
                                 ImGui::TableSetupColumn("File Name / Relative Path", ImGuiTableColumnFlags_WidthStretch);
-                                ImGui::TableSetupColumn("Category / Subgroup", ImGuiTableColumnFlags_WidthFixed, 180.0f);
-                                ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed, 80.0f);
-                                ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+                                ImGui::TableSetupColumn("Category / Subgroup", ImGuiTableColumnFlags_WidthFixed, 160.0f);
+                                ImGui::TableSetupColumn("Target Slot", ImGuiTableColumnFlags_WidthFixed, 110.0f);
+                                ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed, 75.0f);
+                                ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed, 120.0f);
                                 ImGui::TableHeadersRow();
 
                                 for (size_t i = 0; i < modList.size(); i++) {
@@ -507,30 +532,171 @@ namespace UI {
                                     ImGui::TableSetColumnIndex(2);
                                     ImGui::TextColored(ImVec4(0.3f, 0.8f, 1.0f, 1.0f), "%s", mod.subGroupName.c_str());
 
-                                    // Column 3: File Size
+                                    // Column 3: Target Slot
                                     ImGui::TableSetColumnIndex(3);
+                                    if (!mod.targetFile.empty()) {
+                                        ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.4f, 1.0f), "-> %s", mod.targetFile.c_str());
+                                    } else {
+                                        ImGui::TextDisabled("Default");
+                                    }
+
+                                    // Column 4: File Size
+                                    ImGui::TableSetColumnIndex(4);
                                     if (mod.fileSize >= 1024 * 1024) {
                                         ImGui::Text("%.2f MB", (float)mod.fileSize / (1024.0f * 1024.0f));
                                     } else {
                                         ImGui::Text("%.1f KB", (float)mod.fileSize / 1024.0f);
                                     }
 
-                                    // Column 4: Status Badge
-                                    ImGui::TableSetColumnIndex(4);
-                                    if (mod.enabled && vfs.IsEnabled()) {
-                                        ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.3f, 1.0f), "Redirecting");
-                                    } else if (!vfs.IsEnabled()) {
-                                        ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "VFS Off");
+                                    // Column 5: Actions
+                                    ImGui::TableSetColumnIndex(5);
+                                    ImGui::PushID((int)(30000 + i));
+                                    if (!mod.targetFile.empty()) {
+                                        if (ImGui::SmallButton("Change")) {
+                                            s_TargetingModIndex = (int)i;
+                                            s_OpenTargetModal = true;
+                                        }
+                                        ImGui::SameLine();
+                                        if (ImGui::SmallButton("Clear")) {
+                                            vfs.ClearModTarget(i);
+                                        }
                                     } else {
-                                        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Disabled");
+                                        if (ImGui::SmallButton("Target...")) {
+                                            s_TargetingModIndex = (int)i;
+                                            s_OpenTargetModal = true;
+                                        }
                                     }
+                                    ImGui::PopID();
                                 }
                                 ImGui::EndTable();
                             }
                         }
 
+                        // --- INTERACTIVE TARGET CHOOSER MODAL ---
+                        if (s_OpenTargetModal) {
+                            ImGui::OpenPopup("Assign Game Slot");
+                            s_OpenTargetModal = false;
+                        }
+
+                        if (ImGui::BeginPopupModal("Assign Game Slot", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+                            if (s_TargetingModIndex >= 0 && s_TargetingModIndex < (int)modList.size()) {
+                                auto& targetMod = modList[s_TargetingModIndex];
+
+                                ImGui::TextColored(ImVec4(0.2f, 0.7f, 1.0f, 1.0f), "Mod File: %s", targetMod.filename.c_str());
+                                if (!targetMod.targetFile.empty()) {
+                                    ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.4f, 1.0f), "Currently Redirecting To: %s", targetMod.targetFile.c_str());
+                                } else {
+                                    ImGui::TextDisabled("Currently using natural filename (no target assigned).");
+                                }
+                                ImGui::Separator();
+                                ImGui::Spacing();
+
+                                auto teamPresets = Features::VFS::GetTeamPresets();
+
+                                // Option 1: Team Preset Dropdowns
+                                ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.3f, 1.0f), "Option 1: Choose Team Slot");
+                                
+                                if (s_SelectedTeamIdx >= (int)teamPresets.size()) s_SelectedTeamIdx = 0;
+                                const char* currentTeamName = teamPresets[s_SelectedTeamIdx].teamName.c_str();
+
+                                ImGui::SetNextItemWidth(260.0f);
+                                if (ImGui::BeginCombo("Team", currentTeamName)) {
+                                    for (int t = 0; t < (int)teamPresets.size(); t++) {
+                                        bool isSelected = (s_SelectedTeamIdx == t);
+                                        if (ImGui::Selectable(teamPresets[t].teamName.c_str(), isSelected)) {
+                                            s_SelectedTeamIdx = t;
+                                            s_SelectedSlotIdx = 0;
+                                        }
+                                        if (isSelected) ImGui::SetItemDefaultFocus();
+                                    }
+                                    ImGui::EndCombo();
+                                }
+
+                                const auto& slots = teamPresets[s_SelectedTeamIdx].slots;
+                                if (s_SelectedSlotIdx >= (int)slots.size()) s_SelectedSlotIdx = 0;
+                                const char* currentSlotLabel = slots[s_SelectedSlotIdx].label.c_str();
+
+                                ImGui::SetNextItemWidth(260.0f);
+                                if (ImGui::BeginCombo("Asset Slot", currentSlotLabel)) {
+                                    for (int s = 0; s < (int)slots.size(); s++) {
+                                        bool isSelected = (s_SelectedSlotIdx == s);
+                                        if (ImGui::Selectable(slots[s].label.c_str(), isSelected)) {
+                                            s_SelectedSlotIdx = s;
+                                        }
+                                        if (isSelected) ImGui::SetItemDefaultFocus();
+                                    }
+                                    ImGui::EndCombo();
+                                }
+
+                                ImGui::Spacing();
+                                if (ImGui::Button("Apply Team Slot", ImVec2(180, 26))) {
+                                    vfs.SetModTarget((size_t)s_TargetingModIndex, slots[s_SelectedSlotIdx].targetFile);
+                                    ImGui::CloseCurrentPopup();
+                                }
+
+                                ImGui::Spacing();
+                                ImGui::Separator();
+                                ImGui::Spacing();
+
+                                // Option 2: Common Game Asset Slots
+                                ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.3f, 1.0f), "Option 2: Common Global Slots");
+                                if (ImGui::Button("Title Screen (titlepage.iff)")) {
+                                    vfs.SetModTarget((size_t)s_TargetingModIndex, "titlepage.iff");
+                                    ImGui::CloseCurrentPopup();
+                                }
+                                ImGui::SameLine();
+                                if (ImGui::Button("Bootup (bootup.iff)")) {
+                                    vfs.SetModTarget((size_t)s_TargetingModIndex, "bootup.iff");
+                                    ImGui::CloseCurrentPopup();
+                                }
+                                ImGui::SameLine();
+                                if (ImGui::Button("Basketball (nbaball.iff)")) {
+                                    vfs.SetModTarget((size_t)s_TargetingModIndex, "nbaball.iff");
+                                    ImGui::CloseCurrentPopup();
+                                }
+
+                                ImGui::Spacing();
+                                ImGui::Separator();
+                                ImGui::Spacing();
+
+                                // Option 3: Manual Slot Entry
+                                ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.3f, 1.0f), "Option 3: Manual Slot Entry (.iff)");
+                                ImGui::SetNextItemWidth(200.0f);
+                                ImGui::InputTextWithHint("##ManualTargetInput", "e.g. f014.iff, png1013.iff", s_CustomTargetInput, sizeof(s_CustomTargetInput));
+                                ImGui::SameLine();
+                                if (ImGui::Button("Apply Custom")) {
+                                    if (s_CustomTargetInput[0] != '\0') {
+                                        vfs.SetModTarget((size_t)s_TargetingModIndex, s_CustomTargetInput);
+                                        ImGui::CloseCurrentPopup();
+                                    }
+                                }
+
+                                ImGui::Spacing();
+                                ImGui::Separator();
+                                ImGui::Spacing();
+
+                                // Bottom Actions
+                                if (!targetMod.targetFile.empty()) {
+                                    if (ImGui::Button("Clear Target (Use Original Name)")) {
+                                        vfs.ClearModTarget((size_t)s_TargetingModIndex);
+                                        ImGui::CloseCurrentPopup();
+                                    }
+                                    ImGui::SameLine();
+                                }
+
+                                if (ImGui::Button("Cancel", ImVec2(90, 0))) {
+                                    ImGui::CloseCurrentPopup();
+                                }
+                            } else {
+                                if (ImGui::Button("Close")) {
+                                    ImGui::CloseCurrentPopup();
+                                }
+                            }
+                            ImGui::EndPopup();
+                        }
+
                         ImGui::Spacing();
-                        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Tip: Unchecked mods fallback to vanilla game assets. Changes take effect on next asset load.");
+                        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Tip: Unchecked mods fallback to vanilla game assets. Custom targets take effect on next asset load.");
                     }
 
                     ImGui::EndTabItem();
