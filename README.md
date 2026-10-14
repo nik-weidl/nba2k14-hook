@@ -64,6 +64,9 @@ This project introduces a modern, modular hook architecture:
 
 ## Key Features
 
+- **Virtual File System (VFS Mod Loader)**: Drop loose `.iff`, `.bin`, or audio files into the `mods/` folder. The hook intercepts file I/O at runtime and transparently redirects reads. Zero vanilla archives are ever touched or unpacked.
+- **Per-Mod & Folder-Pack Toggles**: Enable or disable individual mod files or entire subfolder mod packs directly from the in-game menu with one click. Disabled mods seamlessly fallback to the original vanilla game archives.
+- **Persistent Configuration**: Toggle states are saved automatically to `mods/disabled_mods.txt` and preserved across game restarts.
 - **Non-Destructive**: Vanilla game files, archives, and executables remain completely untouched. To uninstall, simply delete `dinput8.dll`.
 - **In-Game Graphical Overlay**: Press <kbd>F8</kbd> or <kbd>Insert</kbd> to open a sleek dark-mode menu with responsive tabs, sliders, toggles, and real-time telemetry.
 - **Modern Hardware Compatibility**: Tested and verified on modern GPUs (e.g., NVIDIA GeForce RTX series). Explicitly isolates `System32\d3d9.dll` to prevent conflicts with legacy post-processing mods (such as ENBSeries or SweetFX).
@@ -80,7 +83,7 @@ The overlay contains specialized tabs:
 | **Dashboard** | Real-time FPS telemetry, hook diagnostics, image base verification, and active subsystem indicators. |
 | **Gameplay** | Real-time game speed multiplier slider, unlimited player stamina (fatigue lock), shot timing assist, and signature animation unlock switches. |
 | **Camera & Visuals** | Field of View (FOV) adjustments (30°–120°), free camera mode toggle, and internal engine debug rendering. |
-| **Mods (VFS)** | Virtual File System status indicator for loading loose `.iff` files dynamically from an external `/mods/` folder. |
+| **Mods (VFS)** | Virtual File System manager with live per-mod checkboxes, folder pack toggles, instant search filter, one-click folder opening, and config persistence. |
 | **About** | Build metadata, versioning information, and credits. |
 
 ---
