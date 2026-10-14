@@ -1,0 +1,20 @@
+# Build directories
+build/
+bin/
+out/
+.vs/
+*.user
+
+# Compiled binaries
+*.obj
+*.lib
+*.exp
+*.dll
+*.pdb
+*.ilk
+
+# IDE files
+.vscode/
+*.sln
+*.vcxproj
+*.vcxproj.filters
