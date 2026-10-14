@@ -13,6 +13,12 @@ namespace UI {
     HWND Menu::s_Hwnd = nullptr;
     static char s_ModSearchFilter[128] = "";
 
+    static std::string ToLower(const std::string& str) {
+        std::string lower = str;
+        std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+        return lower;
+    }
+
     void Menu::ApplyTheme() {
         ImGuiStyle& style = ImGui::GetStyle();
         style.WindowRounding = 8.0f;
@@ -270,86 +276,257 @@ namespace UI {
                         ImGui::BulletText("Click 'Rescan Folder' to register them immediately.");
                         ImGui::EndChild();
                     } else {
-                        auto folders = vfs.GetFolders();
-                        if (!folders.empty()) {
-                            if (ImGui::CollapsingHeader("Mod Folders & Packs", ImGuiTreeNodeFlags_DefaultOpen)) {
-                                ImGui::TextDisabled("Quickly toggle entire subfolder mod packs on/off:");
-                                for (size_t fIdx = 0; fIdx < folders.size(); fIdx++) {
-                                    const auto& folder = folders[fIdx];
-                                    bool folderActive = vfs.IsFolderEnabled(folder);
-                                    ImGui::PushID((int)(10000 + fIdx));
-                                    if (ImGui::Checkbox(folder.c_str(), &folderActive)) {
-                                        vfs.SetFolderEnabled(folder, folderActive);
-                                    }
-                                    ImGui::PopID();
-                                }
-                                ImGui::Spacing();
-                            }
-                        }
-
-                        ImGui::InputTextWithHint("##ModSearch", "Filter by filename or folder...", s_ModSearchFilter, sizeof(s_ModSearchFilter));
+                        static int s_ModViewMode = 0; // 0 = Grouped by Function & Teams, 1 = Flat Table List
+                        
+                        ImGui::Text("View Mode:");
+                        ImGui::SameLine();
+                        ImGui::RadioButton("Grouped by Function & Teams", &s_ModViewMode, 0);
+                        ImGui::SameLine();
+                        ImGui::RadioButton("Flat File List", &s_ModViewMode, 1);
                         ImGui::Spacing();
 
-                        if (ImGui::BeginTable("ModsTable", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY, ImVec2(0, 240))) {
-                            ImGui::TableSetupColumn("Active", ImGuiTableColumnFlags_WidthFixed, 50.0f);
-                            ImGui::TableSetupColumn("File Name / Relative Path", ImGuiTableColumnFlags_WidthStretch);
-                            ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed, 90.0f);
-                            ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 110.0f);
-                            ImGui::TableHeadersRow();
+                        ImGui::InputTextWithHint("##ModSearch", "Filter by filename, team, player, or category...", s_ModSearchFilter, sizeof(s_ModSearchFilter));
+                        ImGui::Spacing();
 
-                            std::string searchLower = s_ModSearchFilter;
-                            std::transform(searchLower.begin(), searchLower.end(), searchLower.begin(), ::tolower);
+                        std::string searchLower = s_ModSearchFilter;
+                        std::transform(searchLower.begin(), searchLower.end(), searchLower.begin(), ::tolower);
 
-                            for (size_t i = 0; i < modList.size(); i++) {
-                                auto& mod = modList[i];
+                        if (s_ModViewMode == 0) {
+                            // --- GROUPED VIEW (Categories & Subgroups) ---
+                            auto categoryGroups = vfs.GetCategoryGroups();
 
-                                std::string fnLower = mod.filename;
-                                std::transform(fnLower.begin(), fnLower.end(), fnLower.begin(), ::tolower);
-                                std::string relLower = mod.relativePath;
-                                std::transform(relLower.begin(), relLower.end(), relLower.begin(), ::tolower);
+                            ImGui::BeginChild("GroupedModsScroll", ImVec2(0, 270), false, ImGuiWindowFlags_HorizontalScrollbar);
 
-                                if (!searchLower.empty() && fnLower.find(searchLower) == std::string::npos && relLower.find(searchLower) == std::string::npos) {
-                                    continue;
+                            for (const auto& group : categoryGroups) {
+                                // Count active items in category
+                                size_t catTotal = 0;
+                                size_t catActive = 0;
+                                bool anyMatchesSearch = false;
+
+                                for (const auto& sgPair : group.subGroupIndices) {
+                                    for (size_t idx : sgPair.second) {
+                                        catTotal++;
+                                        if (modList[idx].enabled) catActive++;
+
+                                        if (searchLower.empty()) {
+                                            anyMatchesSearch = true;
+                                        } else {
+                                            std::string fnL = ToLower(modList[idx].filename);
+                                            std::string sgL = ToLower(modList[idx].subGroupName);
+                                            std::string atL = ToLower(modList[idx].assetTypeName);
+                                            std::string catL = ToLower(group.name);
+                                            if (fnL.find(searchLower) != std::string::npos ||
+                                                sgL.find(searchLower) != std::string::npos ||
+                                                atL.find(searchLower) != std::string::npos ||
+                                                catL.find(searchLower) != std::string::npos) {
+                                                anyMatchesSearch = true;
+                                            }
+                                        }
+                                    }
                                 }
 
-                                ImGui::TableNextRow();
+                                if (!anyMatchesSearch) continue;
 
-                                // Column 0: Checkbox
-                                ImGui::TableSetColumnIndex(0);
-                                ImGui::PushID((int)i);
-                                bool isEnabled = mod.enabled;
-                                if (ImGui::Checkbox("##enabled", &isEnabled)) {
-                                    vfs.SetModEnabled(i, isEnabled);
+                                ImGui::PushID((int)group.category);
+
+                                std::string headerTitle = group.name + " (" + std::to_string(catActive) + " of " + std::to_string(catTotal) + " active)";
+                                if (ImGui::CollapsingHeader(headerTitle.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+                                    
+                                    // Category Quick Controls
+                                    ImGui::SameLine(ImGui::GetWindowWidth() - 200.0f);
+                                    if (ImGui::SmallButton("Enable Group")) {
+                                        vfs.SetCategoryEnabled(group.category, true);
+                                    }
+                                    ImGui::SameLine();
+                                    if (ImGui::SmallButton("Disable Group")) {
+                                        vfs.SetCategoryEnabled(group.category, false);
+                                    }
+
+                                    if (group.category == Features::ModCategory::Uncategorized) {
+                                        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f),
+                                            "Notice: These mod files have custom names and do not currently replace a recognized game file slot.");
+                                        ImGui::TextDisabled("In the next step, you will be able to choose a target game file slot for each custom mod.");
+                                        ImGui::Spacing();
+                                    }
+
+                                    // Render Subgroups
+                                    for (const auto& subName : group.subGroupNames) {
+                                        auto it = group.subGroupIndices.find(subName);
+                                        if (it == group.subGroupIndices.end()) continue;
+
+                                        const auto& indices = it->second;
+
+                                        // Search filter check for subgroup
+                                        bool subMatches = false;
+                                        size_t subActive = 0;
+                                        for (size_t idx : indices) {
+                                            if (modList[idx].enabled) subActive++;
+                                            if (searchLower.empty()) {
+                                                subMatches = true;
+                                            } else {
+                                                std::string fnL = ToLower(modList[idx].filename);
+                                                std::string sgL = ToLower(subName);
+                                                std::string atL = ToLower(modList[idx].assetTypeName);
+                                                if (fnL.find(searchLower) != std::string::npos ||
+                                                    sgL.find(searchLower) != std::string::npos ||
+                                                    atL.find(searchLower) != std::string::npos) {
+                                                    subMatches = true;
+                                                }
+                                            }
+                                        }
+
+                                        if (!subMatches) continue;
+
+                                        ImGui::PushID(subName.c_str());
+
+                                        // Subgroup Checkbox & Title
+                                        bool isSubActive = vfs.IsSubGroupEnabled(group.category, subName);
+                                        if (ImGui::Checkbox("##sub_active", &isSubActive)) {
+                                            vfs.SetSubGroupEnabled(group.category, subName, isSubActive);
+                                        }
+                                        ImGui::SameLine();
+
+                                        std::string subTitle = subName + " (" + std::to_string(subActive) + " / " + std::to_string(indices.size()) + " active)";
+                                        if (ImGui::TreeNodeEx(subName.c_str(), ImGuiTreeNodeFlags_DefaultOpen, "%s", subTitle.c_str())) {
+                                            
+                                            // Subgroup Table
+                                            if (ImGui::BeginTable("SubTable", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+                                                ImGui::TableSetupColumn("Active", ImGuiTableColumnFlags_WidthFixed, 45.0f);
+                                                ImGui::TableSetupColumn("File Name", ImGuiTableColumnFlags_WidthStretch);
+                                                ImGui::TableSetupColumn("Asset Type", ImGuiTableColumnFlags_WidthFixed, 140.0f);
+                                                ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+                                                ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+                                                ImGui::TableHeadersRow();
+
+                                                for (size_t modIdx : indices) {
+                                                    auto& mod = modList[modIdx];
+
+                                                    ImGui::TableNextRow();
+
+                                                    // Column 0: Checkbox
+                                                    ImGui::TableSetColumnIndex(0);
+                                                    ImGui::PushID((int)modIdx);
+                                                    bool isModOn = mod.enabled;
+                                                    if (ImGui::Checkbox("##file_on", &isModOn)) {
+                                                        vfs.SetModEnabled(modIdx, isModOn);
+                                                    }
+                                                    ImGui::PopID();
+
+                                                    // Column 1: File Name
+                                                    ImGui::TableSetColumnIndex(1);
+                                                    if (mod.enabled) {
+                                                        ImGui::Text("%s", mod.filename.c_str());
+                                                    } else {
+                                                        ImGui::TextDisabled("%s", mod.filename.c_str());
+                                                    }
+
+                                                    // Column 2: Asset Type
+                                                    ImGui::TableSetColumnIndex(2);
+                                                    ImGui::TextColored(ImVec4(0.3f, 0.8f, 1.0f, 1.0f), "%s", mod.assetTypeName.c_str());
+
+                                                    // Column 3: File Size
+                                                    ImGui::TableSetColumnIndex(3);
+                                                    if (mod.fileSize >= 1024 * 1024) {
+                                                        ImGui::Text("%.2f MB", (float)mod.fileSize / (1024.0f * 1024.0f));
+                                                    } else {
+                                                        ImGui::Text("%.1f KB", (float)mod.fileSize / 1024.0f);
+                                                    }
+
+                                                    // Column 4: Status
+                                                    ImGui::TableSetColumnIndex(4);
+                                                    if (mod.enabled && vfs.IsEnabled()) {
+                                                        ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.3f, 1.0f), "Redirecting");
+                                                    } else if (!vfs.IsEnabled()) {
+                                                        ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "VFS Off");
+                                                    } else {
+                                                        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Disabled");
+                                                    }
+                                                }
+                                                ImGui::EndTable();
+                                            }
+
+                                            ImGui::TreePop();
+                                        }
+
+                                        ImGui::PopID();
+                                        ImGui::Spacing();
+                                    }
                                 }
+
                                 ImGui::PopID();
-
-                                // Column 1: Filename / Path
-                                ImGui::TableSetColumnIndex(1);
-                                if (mod.enabled) {
-                                    ImGui::Text("%s", mod.relativePath.c_str());
-                                } else {
-                                    ImGui::TextDisabled("%s", mod.relativePath.c_str());
-                                }
-
-                                // Column 2: File Size
-                                ImGui::TableSetColumnIndex(2);
-                                if (mod.fileSize >= 1024 * 1024) {
-                                    ImGui::Text("%.2f MB", (float)mod.fileSize / (1024.0f * 1024.0f));
-                                } else {
-                                    ImGui::Text("%.1f KB", (float)mod.fileSize / 1024.0f);
-                                }
-
-                                // Column 3: Status Badge
-                                ImGui::TableSetColumnIndex(3);
-                                if (mod.enabled && vfs.IsEnabled()) {
-                                    ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.3f, 1.0f), "Redirecting");
-                                } else if (!vfs.IsEnabled()) {
-                                    ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "VFS Off");
-                                } else {
-                                    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Disabled (Vanilla)");
-                                }
+                                ImGui::Spacing();
                             }
-                            ImGui::EndTable();
+
+                            ImGui::EndChild();
+                        } else {
+                            // --- FLAT TABLE VIEW ---
+                            if (ImGui::BeginTable("ModsTable", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY, ImVec2(0, 270))) {
+                                ImGui::TableSetupColumn("Active", ImGuiTableColumnFlags_WidthFixed, 45.0f);
+                                ImGui::TableSetupColumn("File Name / Relative Path", ImGuiTableColumnFlags_WidthStretch);
+                                ImGui::TableSetupColumn("Category / Subgroup", ImGuiTableColumnFlags_WidthFixed, 180.0f);
+                                ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+                                ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+                                ImGui::TableHeadersRow();
+
+                                for (size_t i = 0; i < modList.size(); i++) {
+                                    auto& mod = modList[i];
+
+                                    std::string fnLower = mod.filename;
+                                    std::transform(fnLower.begin(), fnLower.end(), fnLower.begin(), ::tolower);
+                                    std::string relLower = mod.relativePath;
+                                    std::transform(relLower.begin(), relLower.end(), relLower.begin(), ::tolower);
+                                    std::string sgLower = mod.subGroupName;
+                                    std::transform(sgLower.begin(), sgLower.end(), sgLower.begin(), ::tolower);
+
+                                    if (!searchLower.empty() && fnLower.find(searchLower) == std::string::npos &&
+                                        relLower.find(searchLower) == std::string::npos &&
+                                        sgLower.find(searchLower) == std::string::npos) {
+                                        continue;
+                                    }
+
+                                    ImGui::TableNextRow();
+
+                                    // Column 0: Checkbox
+                                    ImGui::TableSetColumnIndex(0);
+                                    ImGui::PushID((int)i);
+                                    bool isEnabled = mod.enabled;
+                                    if (ImGui::Checkbox("##enabled", &isEnabled)) {
+                                        vfs.SetModEnabled(i, isEnabled);
+                                    }
+                                    ImGui::PopID();
+
+                                    // Column 1: Filename / Path
+                                    ImGui::TableSetColumnIndex(1);
+                                    if (mod.enabled) {
+                                        ImGui::Text("%s", mod.relativePath.c_str());
+                                    } else {
+                                        ImGui::TextDisabled("%s", mod.relativePath.c_str());
+                                    }
+
+                                    // Column 2: Category & Subgroup
+                                    ImGui::TableSetColumnIndex(2);
+                                    ImGui::TextColored(ImVec4(0.3f, 0.8f, 1.0f, 1.0f), "%s", mod.subGroupName.c_str());
+
+                                    // Column 3: File Size
+                                    ImGui::TableSetColumnIndex(3);
+                                    if (mod.fileSize >= 1024 * 1024) {
+                                        ImGui::Text("%.2f MB", (float)mod.fileSize / (1024.0f * 1024.0f));
+                                    } else {
+                                        ImGui::Text("%.1f KB", (float)mod.fileSize / 1024.0f);
+                                    }
+
+                                    // Column 4: Status Badge
+                                    ImGui::TableSetColumnIndex(4);
+                                    if (mod.enabled && vfs.IsEnabled()) {
+                                        ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.3f, 1.0f), "Redirecting");
+                                    } else if (!vfs.IsEnabled()) {
+                                        ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "VFS Off");
+                                    } else {
+                                        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Disabled");
+                                    }
+                                }
+                                ImGui::EndTable();
+                            }
                         }
 
                         ImGui::Spacing();

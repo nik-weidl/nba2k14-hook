@@ -79,6 +79,305 @@ namespace Features {
         outFile.flush();
     }
 
+    static const std::unordered_map<int, std::string> s_TeamNames = {
+        { 0, "Philadelphia 76ers" },
+        { 1, "Charlotte Bobcats" },
+        { 2, "Milwaukee Bucks" },
+        { 3, "Chicago Bulls" },
+        { 4, "Cleveland Cavaliers" },
+        { 5, "Boston Celtics" },
+        { 6, "LA Clippers" },
+        { 7, "Memphis Grizzlies" },
+        { 8, "Atlanta Hawks" },
+        { 9, "Miami Heat" },
+        { 10, "New Orleans Pelicans" },
+        { 11, "Utah Jazz" },
+        { 12, "Sacramento Kings" },
+        { 13, "New York Knicks" },
+        { 14, "Los Angeles Lakers" },
+        { 15, "Orlando Magic" },
+        { 16, "Dallas Mavericks" },
+        { 17, "Brooklyn Nets" },
+        { 18, "Denver Nuggets" },
+        { 19, "Indiana Pacers" },
+        { 20, "Detroit Pistons" },
+        { 21, "Toronto Raptors" },
+        { 22, "Houston Rockets" },
+        { 23, "San Antonio Spurs" },
+        { 24, "Phoenix Suns" },
+        { 25, "Oklahoma City Thunder" },
+        { 26, "Minnesota Timberwolves" },
+        { 27, "Portland Trail Blazers" },
+        { 28, "Golden State Warriors" },
+        { 29, "Washington Wizards" },
+        { 30, "East All-Stars" },
+        { 31, "West All-Stars" },
+        { 32, "Team Chuck" },
+        { 33, "Team Shaq" },
+        { 550, "'64-'65 Celtics" },
+        { 551, "'64-'65 76ers" },
+        { 552, "'70-'71 Bucks" },
+        { 553, "'70-'71 Lakers" },
+        { 554, "'70-'71 Hawks" },
+        { 555, "'71-'72 Lakers" },
+        { 556, "'71-'72 Knicks" },
+        { 557, "'76-'77 76ers" },
+        { 558, "'84-'85 76ers" },
+        { 559, "'85-'86 Celtics" },
+        { 560, "'85-'86 Bulls" },
+        { 562, "'85-'86 Hawks" },
+        { 564, "'88-'89 Pistons" },
+        { 569, "'88-'89 Bulls" },
+        { 570, "'89-'90 Cavaliers" },
+        { 571, "'90-'91 Bulls" },
+        { 572, "'90-'91 Lakers" },
+        { 574, "'90-'91 Trail Blazers" },
+        { 575, "'90-'91 Warriors" },
+        { 576, "'92-'93 Bulls" },
+        { 583, "'92-'93 Hornets" },
+        { 585, "'93-'94 Bulls" },
+        { 586, "'93-'94 Knicks" },
+        { 588, "'93-'94 Nuggets" },
+        { 589, "'93-'94 Rockets" },
+        { 590, "'95-'96 Bulls" },
+        { 591, "'95-'96 Supersonics" },
+        { 592, "'97-'98 Bulls" },
+        { 593, "'97-'98 Jazz" },
+        { 594, "'97-'98 Lakers" },
+        { 595, "'97-'98 Spurs" }
+    };
+
+    void VFS::ClassifyMod(ModFileInfo& info) {
+        std::string fn = ToLower(info.filename);
+        std::string folder = ToLower(info.folderName);
+
+        auto getDigits = [](const std::string& str, size_t startPos, size_t& len) -> int {
+            len = 0;
+            while (startPos + len < str.length() && isdigit(str[startPos + len])) {
+                len++;
+            }
+            if (len == 0) return -1;
+            try {
+                return std::stoi(str.substr(startPos, len));
+            } catch (...) {
+                return -1;
+            }
+        };
+
+        // 1. Team Assets
+        // Floor: f###.iff
+        if (fn.rfind("f", 0) == 0 && fn.size() >= 5 && fn.rfind(".iff") == fn.size() - 4) {
+            size_t dLen = 0;
+            int id = getDigits(fn, 1, dLen);
+            if (id >= 0 && 1 + dLen == fn.size() - 4) {
+                info.category = ModCategory::Teams;
+                info.categoryName = "Teams & Franchises";
+                info.teamId = id;
+                auto it = s_TeamNames.find(id);
+                info.subGroupName = (it != s_TeamNames.end()) ? it->second : ("Team ID #" + std::to_string(id));
+                info.assetTypeName = "Floor / Court";
+                return;
+            }
+        }
+
+        // Stadium: s###.iff
+        if (fn.rfind("s", 0) == 0 && fn.size() >= 5 && fn.rfind(".iff") == fn.size() - 4) {
+            size_t dLen = 0;
+            int id = getDigits(fn, 1, dLen);
+            if (id >= 0 && 1 + dLen == fn.size() - 4) {
+                info.category = ModCategory::Teams;
+                info.categoryName = "Teams & Franchises";
+                info.teamId = id;
+                auto it = s_TeamNames.find(id);
+                info.subGroupName = (it != s_TeamNames.end()) ? it->second : ("Team ID #" + std::to_string(id));
+                info.assetTypeName = "Stadium & Arena 3D";
+                return;
+            }
+        }
+
+        // Uniform / Jersey: uh###, ua###, ux###, r###, g###, l###
+        if ((fn.rfind("uh", 0) == 0 || fn.rfind("ua", 0) == 0 || fn.rfind("ux", 0) == 0 ||
+             fn.rfind("r", 0) == 0 || fn.rfind("g", 0) == 0 || fn.rfind("l", 0) == 0) &&
+            fn.rfind(".iff") == fn.size() - 4) {
+            size_t prefixLen = (fn[0] == 'u') ? 2 : 1;
+            size_t dLen = 0;
+            int id = getDigits(fn, prefixLen, dLen);
+            if (id >= 0 && prefixLen + dLen == fn.size() - 4) {
+                info.category = ModCategory::Teams;
+                info.categoryName = "Teams & Franchises";
+                info.teamId = id;
+                auto it = s_TeamNames.find(id);
+                info.subGroupName = (it != s_TeamNames.end()) ? it->second : ("Team ID #" + std::to_string(id));
+                std::string uType = (fn.rfind("uh", 0) == 0) ? "Home Uniform" :
+                                    (fn.rfind("ua", 0) == 0) ? "Away Uniform" :
+                                    (fn.rfind("ux", 0) == 0) ? "Alternate Uniform" :
+                                    (fn.rfind("r", 0) == 0) ? "Retro Uniform" : "Uniform";
+                info.assetTypeName = uType;
+                return;
+            }
+        }
+
+        // Dornas / Ads: dorna###.iff
+        if (fn.rfind("dorna", 0) == 0 && fn.rfind(".iff") == fn.size() - 4) {
+            size_t dLen = 0;
+            int id = getDigits(fn, 5, dLen);
+            if (id >= 0) {
+                info.category = ModCategory::Teams;
+                info.categoryName = "Teams & Franchises";
+                info.teamId = id;
+                auto it = s_TeamNames.find(id);
+                info.subGroupName = (it != s_TeamNames.end()) ? it->second : ("Team ID #" + std::to_string(id));
+                info.assetTypeName = "Court Dornas / Ads";
+                return;
+            }
+        }
+
+        // Crowd: crowd###.iff
+        if (fn.rfind("crowd", 0) == 0 && fn.rfind(".iff") == fn.size() - 4) {
+            size_t dLen = 0;
+            int id = getDigits(fn, 5, dLen);
+            if (id >= 0) {
+                info.category = ModCategory::Teams;
+                info.categoryName = "Teams & Franchises";
+                info.teamId = id;
+                auto it = s_TeamNames.find(id);
+                info.subGroupName = (it != s_TeamNames.end()) ? it->second : ("Team ID #" + std::to_string(id));
+                info.assetTypeName = "Arena Crowd";
+                return;
+            }
+        }
+
+        // Logo: logo###.iff
+        if (fn.rfind("logo", 0) == 0 && fn.rfind(".iff") == fn.size() - 4) {
+            size_t dLen = 0;
+            int id = getDigits(fn, 4, dLen);
+            if (id >= 0) {
+                info.category = ModCategory::Teams;
+                info.categoryName = "Teams & Franchises";
+                info.teamId = id;
+                auto it = s_TeamNames.find(id);
+                info.subGroupName = (it != s_TeamNames.end()) ? it->second : ("Team ID #" + std::to_string(id));
+                info.assetTypeName = "Team Logo / Branding";
+                return;
+            }
+        }
+
+        // 2. Cyberfaces & Players
+        // png####.iff
+        if (fn.rfind("png", 0) == 0 && fn.rfind(".iff") == fn.size() - 4) {
+            size_t dLen = 0;
+            int id = getDigits(fn, 3, dLen);
+            if (id >= 0 && 3 + dLen == fn.size() - 4) {
+                info.category = ModCategory::Cyberfaces;
+                info.categoryName = "Cyberfaces & Players";
+                info.subGroupName = !info.folderName.empty() ? info.folderName : ("Player #" + std::to_string(id));
+                info.assetTypeName = "3D Cyberface Model";
+                return;
+            }
+        }
+
+        // face####.iff
+        if (fn.rfind("face", 0) == 0 && fn.rfind(".iff") == fn.size() - 4) {
+            size_t dLen = 0;
+            int id = getDigits(fn, 4, dLen);
+            if (id >= 0 && 4 + dLen == fn.size() - 4) {
+                info.category = ModCategory::Cyberfaces;
+                info.categoryName = "Cyberfaces & Players";
+                info.subGroupName = !info.folderName.empty() ? info.folderName : ("Player #" + std::to_string(id));
+                info.assetTypeName = "Face Textures";
+                return;
+            }
+        }
+
+        // bar####.iff
+        if (fn.rfind("bar", 0) == 0 && fn.rfind(".iff") == fn.size() - 4) {
+            size_t dLen = 0;
+            int id = getDigits(fn, 3, dLen);
+            if (id >= 0 && 3 + dLen == fn.size() - 4) {
+                info.category = ModCategory::Cyberfaces;
+                info.categoryName = "Cyberfaces & Players";
+                info.subGroupName = !info.folderName.empty() ? info.folderName : ("Player #" + std::to_string(id));
+                info.assetTypeName = "Accessories / Arms";
+                return;
+            }
+        }
+
+        // 3. Presentation & UI
+        if (fn == "titlepage.iff" || fn == "bootup.iff" || fn.find("wipe") != std::string::npos ||
+            fn.find("scorebug") != std::string::npos || fn == "gamedata.iff" ||
+            fn == "english.iff" || fn == "french.iff" || fn == "spanish.iff" || fn == "german.iff") {
+            info.category = ModCategory::Presentation;
+            info.categoryName = "Presentation & Broadcast UI";
+            if (fn == "titlepage.iff" || fn == "bootup.iff") {
+                info.subGroupName = "Title Screen & Menus";
+                info.assetTypeName = (fn == "titlepage.iff") ? "Title Page" : "Bootup Screen";
+            } else if (fn.find("scorebug") != std::string::npos || fn.find("wipe") != std::string::npos) {
+                info.subGroupName = "Broadcast & Scoreboards";
+                info.assetTypeName = (fn.find("wipe") != std::string::npos) ? "Replay Wipe Animation" : "Scoreboard";
+            } else {
+                info.subGroupName = "Text & Language Databases";
+                info.assetTypeName = "Database File";
+            }
+            return;
+        }
+
+        // 4. Shoes & Gear
+        if (fn.find("shoe") != std::string::npos || fn.find("sneaker") != std::string::npos) {
+            info.category = ModCategory::Shoes;
+            info.categoryName = "Shoes & Gear";
+            info.subGroupName = !info.folderName.empty() ? info.folderName : "General Shoes";
+            info.assetTypeName = "Shoe Asset";
+            return;
+        }
+
+        // 5. Gameplay & Ball
+        if (fn.find("ball") != std::string::npos || fn.find("anim") != std::string::npos || fn.find("dunk") != std::string::npos) {
+            info.category = ModCategory::GameplayAndBall;
+            info.categoryName = "Gameplay & Basketballs";
+            info.subGroupName = (fn.find("ball") != std::string::npos) ? "Game Balls" : "Animations";
+            info.assetTypeName = (fn.find("ball") != std::string::npos) ? "Basketball Asset" : "Animation Asset";
+            return;
+        }
+
+        // 6. Audio
+        if (fn.rfind(".bnk") == fn.size() - 4 || fn.rfind(".spc") == fn.size() - 4) {
+            info.category = ModCategory::Audio;
+            info.categoryName = "Audio & Sounds";
+            info.subGroupName = !info.folderName.empty() ? info.folderName : "Soundbanks";
+            info.assetTypeName = "Audio Bank";
+            return;
+        }
+
+        // 7. Folder-derived Category
+        if (!folder.empty()) {
+            if (folder.find("team") != std::string::npos) {
+                info.category = ModCategory::Teams;
+                info.categoryName = "Teams & Franchises";
+                info.subGroupName = info.folderName;
+                info.assetTypeName = "Team Asset";
+                return;
+            } else if (folder.find("face") != std::string::npos || folder.find("player") != std::string::npos) {
+                info.category = ModCategory::Cyberfaces;
+                info.categoryName = "Cyberfaces & Players";
+                info.subGroupName = info.folderName;
+                info.assetTypeName = "Player Asset";
+                return;
+            } else if (folder.find("ui") != std::string::npos || folder.find("presentation") != std::string::npos || folder.find("menu") != std::string::npos) {
+                info.category = ModCategory::Presentation;
+                info.categoryName = "Presentation & Broadcast UI";
+                info.subGroupName = info.folderName;
+                info.assetTypeName = "UI Asset";
+                return;
+            }
+        }
+
+        // 8. Uncategorized (Ready for manual targeting)
+        info.category = ModCategory::Uncategorized;
+        info.categoryName = "Uncategorized Mods (Target Needed)";
+        info.subGroupName = !info.folderName.empty() ? info.folderName : "Loose / Needs Target";
+        info.assetTypeName = (fn.rfind("f", 0) == 0 && fn.find(".iff") != std::string::npos) ? "Court Mod (Needs Target)" : "Custom File";
+    }
+
     void VFS::ScanDirectoryRecursive(const std::string& directory, const std::string& subDir) {
         std::string searchPath = directory + "\\*";
         WIN32_FIND_DATAA fd;
@@ -113,10 +412,22 @@ namespace Features {
 
                 size_t index = m_ModList.size();
                 m_ModIndexMap[filenameLower].push_back(index);
-                m_ModList.push_back({ fd.cFileName, relPath, fullPath, subDir, fileSize, isEnabled });
 
-                LOG_INFO("[VFS] Registered mod file: %s (folder: '%s', enabled: %s, size: %llu bytes)",
-                    relPath.c_str(), subDir.c_str(), isEnabled ? "YES" : "NO", fileSize);
+                ModFileInfo info;
+                info.filename = fd.cFileName;
+                info.relativePath = relPath;
+                info.fullPath = fullPath;
+                info.folderName = subDir;
+                info.fileSize = fileSize;
+                info.enabled = isEnabled;
+
+                ClassifyMod(info);
+
+                m_ModList.push_back(info);
+
+                LOG_INFO("[VFS] Registered mod file: %s -> [%s / %s / %s] (enabled: %s, size: %llu bytes)",
+                    relPath.c_str(), info.categoryName.c_str(), info.subGroupName.c_str(), info.assetTypeName.c_str(),
+                    isEnabled ? "YES" : "NO", fileSize);
             }
         } while (FindNextFileA(hFind, &fd));
 
@@ -190,6 +501,106 @@ namespace Features {
             }
         }
         return true;
+    }
+
+    void VFS::SetCategoryEnabled(ModCategory category, bool enabled) {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        for (auto& mod : m_ModList) {
+            if (mod.category == category) {
+                mod.enabled = enabled;
+                std::string relLower = ToLower(mod.relativePath);
+                std::string fnLower = ToLower(mod.filename);
+                if (enabled) {
+                    m_DisabledFilenames.erase(relLower);
+                    m_DisabledFilenames.erase(fnLower);
+                } else {
+                    m_DisabledFilenames.insert(relLower);
+                }
+            }
+        }
+        SaveConfig();
+        LOG_INFO("[VFS] Category %d is now %s.", (int)category, enabled ? "ENABLED" : "DISABLED");
+    }
+
+    void VFS::SetSubGroupEnabled(ModCategory category, const std::string& subGroupName, bool enabled) {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        for (auto& mod : m_ModList) {
+            if (mod.category == category && mod.subGroupName == subGroupName) {
+                mod.enabled = enabled;
+                std::string relLower = ToLower(mod.relativePath);
+                std::string fnLower = ToLower(mod.filename);
+                if (enabled) {
+                    m_DisabledFilenames.erase(relLower);
+                    m_DisabledFilenames.erase(fnLower);
+                } else {
+                    m_DisabledFilenames.insert(relLower);
+                }
+            }
+        }
+        SaveConfig();
+        LOG_INFO("[VFS] Subgroup '%s' in category %d is now %s.", subGroupName.c_str(), (int)category, enabled ? "ENABLED" : "DISABLED");
+    }
+
+    bool VFS::IsCategoryEnabled(ModCategory category) const {
+        for (const auto& mod : m_ModList) {
+            if (mod.category == category && !mod.enabled) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool VFS::IsSubGroupEnabled(ModCategory category, const std::string& subGroupName) const {
+        for (const auto& mod : m_ModList) {
+            if (mod.category == category && mod.subGroupName == subGroupName && !mod.enabled) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    std::vector<CategoryGroup> VFS::GetCategoryGroups() const {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+
+        std::vector<std::pair<ModCategory, std::string>> catOrder = {
+            { ModCategory::Teams, "Teams & Franchises" },
+            { ModCategory::Cyberfaces, "Cyberfaces & Players" },
+            { ModCategory::Presentation, "Presentation & Broadcast UI" },
+            { ModCategory::Shoes, "Shoes & Gear" },
+            { ModCategory::GameplayAndBall, "Gameplay & Basketballs" },
+            { ModCategory::Audio, "Audio & Sounds" },
+            { ModCategory::Uncategorized, "Uncategorized Mods (Target Needed)" }
+        };
+
+        std::vector<CategoryGroup> result;
+
+        for (const auto& catPair : catOrder) {
+            CategoryGroup group;
+            group.category = catPair.first;
+            group.name = catPair.second;
+
+            std::unordered_map<std::string, std::vector<size_t>> subMap;
+            std::vector<std::string> subOrder;
+
+            for (size_t i = 0; i < m_ModList.size(); i++) {
+                if (m_ModList[i].category == catPair.first) {
+                    const std::string& sg = m_ModList[i].subGroupName;
+                    if (subMap.find(sg) == subMap.end()) {
+                        subOrder.push_back(sg);
+                    }
+                    subMap[sg].push_back(i);
+                }
+            }
+
+            if (!subOrder.empty()) {
+                std::sort(subOrder.begin(), subOrder.end());
+                group.subGroupNames = subOrder;
+                group.subGroupIndices = subMap;
+                result.push_back(group);
+            }
+        }
+
+        return result;
     }
 
     void VFS::EnableAllMods() {
