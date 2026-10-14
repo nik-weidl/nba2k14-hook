@@ -44,11 +44,11 @@ set(SOURCES
     vendor/minhook/src/hde/hde32.c
 )
 
-# Create 32-bit proxy DLL
+# Create 32-bit proxy DLL (dinput8.dll)
 add_library(dinput8 SHARED ${SOURCES} dinput8.def)
 
+# Link only essential Win32 system libraries (d3d9 is loaded dynamically from System32)
 target_link_libraries(dinput8 PRIVATE
-    d3d9
     user32
     gdi32
 )
