@@ -121,7 +121,7 @@ namespace UI {
                 ImGui::Text("| %.1f FPS", io.Framerate);
                 ImGui::SameLine();
                 if (vfs.GetModCount() > 0) {
-                    ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.4f, 1.0f), "| %zu Mods Active", vfs.GetModCount());
+                    ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.4f, 1.0f), "| %zu/%zu Mods Active", vfs.GetEnabledModCount(), vfs.GetModCount());
                     ImGui::SameLine();
                 }
                 ImGui::TextDisabled("| [F8] Menu");
@@ -132,7 +132,7 @@ namespace UI {
         // 2. Main Menu Window (Toggled via F8 or Insert)
         if (!settings.showMenu) return;
 
-        ImGui::SetNextWindowSize(ImVec2(720, 520), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(760, 540), ImGuiCond_FirstUseEver);
         if (ImGui::Begin("NBA 2K14 Feature Hook", &settings.showMenu, ImGuiWindowFlags_NoCollapse)) {
             if (ImGui::BeginTabBar("MainTabs")) {
                 
@@ -158,7 +158,8 @@ namespace UI {
                     ImGui::Text("Virtual File System (VFS):");
                     ImGui::NextColumn();
                     if (vfs.IsEnabled()) {
-                        ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.3f, 1.0f), "ONLINE (%zu active files, %zu redirected)", vfs.GetModCount(), vfs.GetTotalRedirections());
+                        ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.3f, 1.0f), "ONLINE (%zu of %zu active, %zu redirected)",
+                            vfs.GetEnabledModCount(), vfs.GetModCount(), vfs.GetTotalRedirections());
                     } else {
                         ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "DISABLED");
                     }
@@ -224,12 +225,12 @@ namespace UI {
                 if (ImGui::BeginTabItem("Mods (VFS)")) {
                     ImGui::Spacing();
                     ImGui::TextColored(ImVec4(0.2f, 0.7f, 1.0f, 1.0f), "Virtual File System (VFS) Mod Loader");
-                    ImGui::TextWrapped("Drop loose .iff, .bin, or audio files into the 'mods/' folder. The VFS transparently redirects file-open calls at runtime so vanilla archives never need to be unpacked or modified.");
+                    ImGui::TextWrapped("Drop loose .iff, .bin, or audio files into the 'mods/' folder. You can enable or disable individual mods below—unchecked mods will automatically fallback to the vanilla game files.");
                     ImGui::Separator();
                     ImGui::Spacing();
 
                     bool vfsEnabled = vfs.IsEnabled();
-                    if (ImGui::Checkbox("Enable /mods/ Folder Redirection", &vfsEnabled)) {
+                    if (ImGui::Checkbox("Master VFS Redirection", &vfsEnabled)) {
                         vfs.SetEnabled(vfsEnabled);
                     }
 
@@ -243,12 +244,23 @@ namespace UI {
                         vfs.Rescan();
                     }
 
+                    ImGui::SameLine();
+                    if (ImGui::Button("Enable All")) {
+                        vfs.EnableAllMods();
+                    }
+
+                    ImGui::SameLine();
+                    if (ImGui::Button("Disable All")) {
+                        vfs.DisableAllMods();
+                    }
+
                     ImGui::Spacing();
-                    ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "Active Mods: %zu  |  Total Redirections: %zu", vfs.GetModCount(), vfs.GetTotalRedirections());
+                    ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "Active: %zu of %zu enabled  |  Total Redirections: %zu",
+                        vfs.GetEnabledModCount(), vfs.GetModCount(), vfs.GetTotalRedirections());
                     ImGui::TextDisabled("Location: %s", vfs.GetModsDirectory().c_str());
                     ImGui::Spacing();
 
-                    const auto& modList = vfs.GetLoadedMods();
+                    auto& modList = vfs.GetLoadedMods();
                     if (modList.empty()) {
                         ImGui::BeginChild("EmptyModsBox", ImVec2(0, 150), true);
                         ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "No loose mod files found in /mods/ yet!");
@@ -258,42 +270,90 @@ namespace UI {
                         ImGui::BulletText("Click 'Rescan Folder' to register them immediately.");
                         ImGui::EndChild();
                     } else {
-                        ImGui::InputTextWithHint("##ModSearch", "Filter by filename...", s_ModSearchFilter, sizeof(s_ModSearchFilter));
+                        auto folders = vfs.GetFolders();
+                        if (!folders.empty()) {
+                            if (ImGui::CollapsingHeader("Mod Folders & Packs", ImGuiTreeNodeFlags_DefaultOpen)) {
+                                ImGui::TextDisabled("Quickly toggle entire subfolder mod packs on/off:");
+                                for (size_t fIdx = 0; fIdx < folders.size(); fIdx++) {
+                                    const auto& folder = folders[fIdx];
+                                    bool folderActive = vfs.IsFolderEnabled(folder);
+                                    ImGui::PushID((int)(10000 + fIdx));
+                                    if (ImGui::Checkbox(folder.c_str(), &folderActive)) {
+                                        vfs.SetFolderEnabled(folder, folderActive);
+                                    }
+                                    ImGui::PopID();
+                                }
+                                ImGui::Spacing();
+                            }
+                        }
+
+                        ImGui::InputTextWithHint("##ModSearch", "Filter by filename or folder...", s_ModSearchFilter, sizeof(s_ModSearchFilter));
                         ImGui::Spacing();
 
-                        if (ImGui::BeginTable("ModsTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY, ImVec2(0, 200))) {
-                            ImGui::TableSetupColumn("File Name", ImGuiTableColumnFlags_WidthStretch);
+                        if (ImGui::BeginTable("ModsTable", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY, ImVec2(0, 240))) {
+                            ImGui::TableSetupColumn("Active", ImGuiTableColumnFlags_WidthFixed, 50.0f);
+                            ImGui::TableSetupColumn("File Name / Relative Path", ImGuiTableColumnFlags_WidthStretch);
                             ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed, 90.0f);
-                            ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+                            ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 110.0f);
                             ImGui::TableHeadersRow();
 
                             std::string searchLower = s_ModSearchFilter;
                             std::transform(searchLower.begin(), searchLower.end(), searchLower.begin(), ::tolower);
 
-                            for (const auto& mod : modList) {
+                            for (size_t i = 0; i < modList.size(); i++) {
+                                auto& mod = modList[i];
+
                                 std::string fnLower = mod.filename;
                                 std::transform(fnLower.begin(), fnLower.end(), fnLower.begin(), ::tolower);
+                                std::string relLower = mod.relativePath;
+                                std::transform(relLower.begin(), relLower.end(), relLower.begin(), ::tolower);
 
-                                if (!searchLower.empty() && fnLower.find(searchLower) == std::string::npos) {
+                                if (!searchLower.empty() && fnLower.find(searchLower) == std::string::npos && relLower.find(searchLower) == std::string::npos) {
                                     continue;
                                 }
 
                                 ImGui::TableNextRow();
-                                ImGui::TableSetColumnIndex(0);
-                                ImGui::Text("%s", mod.relativePath.c_str());
 
+                                // Column 0: Checkbox
+                                ImGui::TableSetColumnIndex(0);
+                                ImGui::PushID((int)i);
+                                bool isEnabled = mod.enabled;
+                                if (ImGui::Checkbox("##enabled", &isEnabled)) {
+                                    vfs.SetModEnabled(i, isEnabled);
+                                }
+                                ImGui::PopID();
+
+                                // Column 1: Filename / Path
                                 ImGui::TableSetColumnIndex(1);
+                                if (mod.enabled) {
+                                    ImGui::Text("%s", mod.relativePath.c_str());
+                                } else {
+                                    ImGui::TextDisabled("%s", mod.relativePath.c_str());
+                                }
+
+                                // Column 2: File Size
+                                ImGui::TableSetColumnIndex(2);
                                 if (mod.fileSize >= 1024 * 1024) {
                                     ImGui::Text("%.2f MB", (float)mod.fileSize / (1024.0f * 1024.0f));
                                 } else {
                                     ImGui::Text("%.1f KB", (float)mod.fileSize / 1024.0f);
                                 }
 
-                                ImGui::TableSetColumnIndex(2);
-                                ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.3f, 1.0f), "Redirecting");
+                                // Column 3: Status Badge
+                                ImGui::TableSetColumnIndex(3);
+                                if (mod.enabled && vfs.IsEnabled()) {
+                                    ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.3f, 1.0f), "Redirecting");
+                                } else if (!vfs.IsEnabled()) {
+                                    ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "VFS Off");
+                                } else {
+                                    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Disabled (Vanilla)");
+                                }
                             }
                             ImGui::EndTable();
                         }
+
+                        ImGui::Spacing();
+                        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Tip: Unchecked mods fallback to vanilla game assets. Changes take effect on next asset load.");
                     }
 
                     ImGui::EndTabItem();
@@ -306,7 +366,7 @@ namespace UI {
                     ImGui::Text("Developed for high-performance in-game feature injection and modding.");
                     ImGui::Separator();
                     ImGui::BulletText("Direct3D 9Ex EndScene & Reset Detours");
-                    ImGui::BulletText("Virtual File System (VFS) with O(1) Cache");
+                    ImGui::BulletText("Virtual File System (VFS) with Per-Mod Toggle & O(1) Cache");
                     ImGui::BulletText("Dear ImGui 1.90+ Integration");
                     ImGui::BulletText("MinHook Trampoline Disassembler Engine");
                     ImGui::BulletText("DirectInput 8 System Proxy Interceptor");
