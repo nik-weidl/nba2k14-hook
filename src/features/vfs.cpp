@@ -435,8 +435,9 @@ namespace Features {
                 continue;
             }
 
-            // Ignore config file
-            if (_stricmp(fd.cFileName, "disabled_mods.txt") == 0) {
+            // Ignore internal hook configuration files
+            if (_stricmp(fd.cFileName, "disabled_mods.txt") == 0 ||
+                _stricmp(fd.cFileName, "mod_targets.txt") == 0) {
                 continue;
             }
 
@@ -444,9 +445,20 @@ namespace Features {
             std::string relPath = subDir.empty() ? fd.cFileName : (subDir + "/" + fd.cFileName);
 
             if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+                if (fd.cFileName[0] == '.') continue; // Ignore hidden directories (.git, etc.)
                 ScanDirectoryRecursive(fullPath, relPath);
             } else {
                 std::string filenameLower = ToLower(fd.cFileName);
+
+                // Ignore non-game asset files (readmes, configs, docs, logs, system files)
+                if ((filenameLower.size() >= 4 && filenameLower.rfind(".txt") == filenameLower.size() - 4) ||
+                    (filenameLower.size() >= 4 && filenameLower.rfind(".ini") == filenameLower.size() - 4) ||
+                    (filenameLower.size() >= 3 && filenameLower.rfind(".md") == filenameLower.size() - 3) ||
+                    (filenameLower.size() >= 4 && filenameLower.rfind(".log") == filenameLower.size() - 4) ||
+                    filenameLower == "desktop.ini" || filenameLower == "thumbs.db") {
+                    continue;
+                }
+
                 std::string relPathLower = ToLower(relPath);
                 std::string folderLower = ToLower(subDir);
                 uint64_t fileSize = ((uint64_t)fd.nFileSizeHigh << 32) | fd.nFileSizeLow;
