@@ -6,27 +6,42 @@
 namespace Hooks {
     FileHook::CreateFileA_t FileHook::s_OriginalCreateFileA = nullptr;
     FileHook::CreateFileW_t FileHook::s_OriginalCreateFileW = nullptr;
+    static void* s_TargetCreateFileA = nullptr;
+    static void* s_TargetCreateFileW = nullptr;
     bool FileHook::s_Initialized = false;
 
     bool FileHook::Init() {
         LOG_INFO("Installing File I/O (CreateFile) hooks for VFS...");
 
-        if (MH_CreateHookApi(L"kernel32", "CreateFileA", &Hooked_CreateFileA, reinterpret_cast<void**>(&s_OriginalCreateFileA)) != MH_OK) {
+        HMODULE hKernel32 = GetModuleHandleA("kernel32.dll");
+        if (!hKernel32) {
+            hKernel32 = LoadLibraryA("kernel32.dll");
+        }
+
+        s_TargetCreateFileA = (void*)GetProcAddress(hKernel32, "CreateFileA");
+        s_TargetCreateFileW = (void*)GetProcAddress(hKernel32, "CreateFileW");
+
+        if (!s_TargetCreateFileA) {
+            LOG_ERROR("Failed to find CreateFileA in kernel32.dll!");
+            return false;
+        }
+
+        if (MH_CreateHook(s_TargetCreateFileA, &Hooked_CreateFileA, reinterpret_cast<void**>(&s_OriginalCreateFileA)) != MH_OK) {
             LOG_ERROR("Failed to create hook for CreateFileA!");
             return false;
         }
 
-        if (MH_CreateHookApi(L"kernel32", "CreateFileW", &Hooked_CreateFileW, reinterpret_cast<void**>(&s_OriginalCreateFileW)) != MH_OK) {
-            LOG_WARN("Failed to create hook for CreateFileW (continuing with CreateFileA).");
+        if (s_TargetCreateFileW) {
+            MH_CreateHook(s_TargetCreateFileW, &Hooked_CreateFileW, reinterpret_cast<void**>(&s_OriginalCreateFileW));
         }
 
-        if (MH_EnableHook(&CreateFileA) != MH_OK) {
+        if (MH_EnableHook(s_TargetCreateFileA) != MH_OK) {
             LOG_ERROR("Failed to enable CreateFileA hook!");
             return false;
         }
 
-        if (s_OriginalCreateFileW) {
-            MH_EnableHook(&CreateFileW);
+        if (s_TargetCreateFileW && s_OriginalCreateFileW) {
+            MH_EnableHook(s_TargetCreateFileW);
         }
 
         s_Initialized = true;
@@ -36,10 +51,8 @@ namespace Hooks {
 
     void FileHook::Shutdown() {
         if (!s_Initialized) return;
-        MH_DisableHook(&CreateFileA);
-        if (s_OriginalCreateFileW) {
-            MH_DisableHook(&CreateFileW);
-        }
+        if (s_TargetCreateFileA) MH_DisableHook(s_TargetCreateFileA);
+        if (s_TargetCreateFileW) MH_DisableHook(s_TargetCreateFileW);
         s_Initialized = false;
         LOG_INFO("File I/O hooks uninstalled.");
     }
@@ -90,7 +103,6 @@ namespace Hooks {
         HANDLE hTemplateFile
     ) {
         if (lpFileName && (dwDesiredAccess & GENERIC_READ)) {
-            // Convert wide string to multi-byte for lookup
             char ansiBuffer[MAX_PATH] = {};
             WideCharToMultiByte(CP_ACP, 0, lpFileName, -1, ansiBuffer, MAX_PATH, NULL, NULL);
 

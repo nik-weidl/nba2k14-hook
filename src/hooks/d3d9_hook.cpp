@@ -134,8 +134,9 @@ namespace Hooks {
             return false;
         }
 
-        if (MH_Initialize() != MH_OK) {
-            LOG_ERROR("Failed to initialize MinHook!");
+        MH_STATUS mhStatus = MH_Initialize();
+        if (mhStatus != MH_OK && mhStatus != MH_ERROR_ALREADY_INITIALIZED) {
+            LOG_ERROR("Failed to initialize MinHook! Status: %d", mhStatus);
             return false;
         }
 
@@ -149,8 +150,8 @@ namespace Hooks {
             return false;
         }
 
-        if (MH_EnableHook(MH_ALL_HOOKS) != MH_OK) {
-            LOG_ERROR("Failed to enable MinHook hooks!");
+        if (MH_EnableHook(s_TargetEndScene) != MH_OK || MH_EnableHook(s_TargetReset) != MH_OK) {
+            LOG_ERROR("Failed to enable DirectX 9 hooks!");
             return false;
         }
 
@@ -159,8 +160,8 @@ namespace Hooks {
     }
 
     void D3D9Hook::Shutdown() {
-        MH_DisableHook(MH_ALL_HOOKS);
-        MH_Uninitialize();
+        if (s_TargetEndScene) MH_DisableHook(s_TargetEndScene);
+        if (s_TargetReset) MH_DisableHook(s_TargetReset);
         UI::Menu::Shutdown();
         WndProcHook::Shutdown();
         LOG_INFO("DirectX 9 hooks uninstalled.");
