@@ -16,6 +16,9 @@ namespace Features {
         bool bulletTimeHoldMode = true; // true: Hold key, false: Toggle key
         
         bool unlimitedStamina = false;
+        bool godShooting = false;
+        bool highlightDunkBoost = false;
+        bool cleanDefense = false;
         bool freezeShotClock = false;
         bool freezeGameClock = false;
         bool shotMeterAlwaysGreen = false;

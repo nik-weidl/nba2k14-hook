@@ -6,10 +6,21 @@
 
 namespace Features {
     // Verified fixed static memory addresses in nba2k14.exe (.data section)
-    static constexpr uintptr_t ADDR_SHOT_CLOCK    = 0x01dee638; // Current Shot Clock float
-    static constexpr uintptr_t ADDR_GAME_CLOCK    = 0x01dee654; // Current Quarter Game Clock float
-    static constexpr uintptr_t ADDR_USER_FATIGUE  = 0x01e6965c; // User Fatigue Rate slider float
-    static constexpr uintptr_t ADDR_CPU_FATIGUE   = 0x01e69660; // CPU Fatigue Rate slider float
+    static constexpr uintptr_t ADDR_SHOT_CLOCK        = 0x01dee638; // Current Shot Clock float
+    static constexpr uintptr_t ADDR_GAME_CLOCK        = 0x01dee654; // Current Quarter Game Clock float
+    static constexpr uintptr_t ADDR_USER_FATIGUE      = 0x01e6965c; // User Fatigue Rate slider float
+    static constexpr uintptr_t ADDR_CPU_FATIGUE       = 0x01e69660; // CPU Fatigue Rate slider float
+
+    // Shooting, Dunk & Defense Sliders
+    static constexpr uintptr_t ADDR_SLIDER_TABLE      = 0x01e69560;
+    static constexpr uintptr_t ADDR_SHOT_INSIDE_USER   = ADDR_SLIDER_TABLE + 0x04;
+    static constexpr uintptr_t ADDR_SHOT_CLOSE_USER    = ADDR_SLIDER_TABLE + 0x0c;
+    static constexpr uintptr_t ADDR_SHOT_MID_USER      = ADDR_SLIDER_TABLE + 0x14;
+    static constexpr uintptr_t ADDR_SHOT_3PT_USER      = ADDR_SLIDER_TABLE + 0x1c;
+    static constexpr uintptr_t ADDR_SHOT_LAYUP_USER    = ADDR_SLIDER_TABLE + 0x24;
+    static constexpr uintptr_t ADDR_DUNK_TRAFFIC_FREQ  = ADDR_SLIDER_TABLE + 0x2c;
+    static constexpr uintptr_t ADDR_DUNK_TRAFFIC_SUCC  = ADDR_SLIDER_TABLE + 0x34;
+    static constexpr uintptr_t ADDR_REACHING_FOUL      = ADDR_SLIDER_TABLE + 0x194;
 
     MatchController& MatchController::Get() {
         static MatchController instance;
@@ -142,12 +153,86 @@ namespace Features {
         __except (EXCEPTION_EXECUTE_HANDLER) {}
     }
 
+    void MatchController::SetGodShooting(bool enabled) {
+        m_GodShooting = enabled;
+        __try {
+            if (enabled) {
+                if (!m_SlidersSaved) {
+                    m_SavedInsideShot = *reinterpret_cast<const float*>(ADDR_SHOT_INSIDE_USER);
+                    m_SavedCloseShot  = *reinterpret_cast<const float*>(ADDR_SHOT_CLOSE_USER);
+                    m_SavedMidShot    = *reinterpret_cast<const float*>(ADDR_SHOT_MID_USER);
+                    m_Saved3ptShot    = *reinterpret_cast<const float*>(ADDR_SHOT_3PT_USER);
+                    m_SavedLayup      = *reinterpret_cast<const float*>(ADDR_SHOT_LAYUP_USER);
+                    m_SlidersSaved = true;
+                }
+                *reinterpret_cast<float*>(ADDR_SHOT_INSIDE_USER) = 1.0f;
+                *reinterpret_cast<float*>(ADDR_SHOT_CLOSE_USER)  = 1.0f;
+                *reinterpret_cast<float*>(ADDR_SHOT_MID_USER)    = 1.0f;
+                *reinterpret_cast<float*>(ADDR_SHOT_3PT_USER)    = 1.0f;
+                *reinterpret_cast<float*>(ADDR_SHOT_LAYUP_USER)  = 1.0f;
+                LOG_INFO("[MatchController] God Shooting Assist ENABLED (100%% Shot Make Rates)");
+            } else {
+                if (m_SlidersSaved) {
+                    *reinterpret_cast<float*>(ADDR_SHOT_INSIDE_USER) = m_SavedInsideShot;
+                    *reinterpret_cast<float*>(ADDR_SHOT_CLOSE_USER)  = m_SavedCloseShot;
+                    *reinterpret_cast<float*>(ADDR_SHOT_MID_USER)    = m_SavedMidShot;
+                    *reinterpret_cast<float*>(ADDR_SHOT_3PT_USER)    = m_Saved3ptShot;
+                    *reinterpret_cast<float*>(ADDR_SHOT_LAYUP_USER)  = m_SavedLayup;
+                }
+                LOG_INFO("[MatchController] God Shooting Assist DISABLED");
+            }
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER) {}
+    }
+
+    void MatchController::SetHighlightDunkBoost(bool enabled) {
+        m_HighlightDunkBoost = enabled;
+        __try {
+            if (enabled) {
+                m_SavedDunkFreq = *reinterpret_cast<const float*>(ADDR_DUNK_TRAFFIC_FREQ);
+                m_SavedDunkSucc = *reinterpret_cast<const float*>(ADDR_DUNK_TRAFFIC_SUCC);
+                *reinterpret_cast<float*>(ADDR_DUNK_TRAFFIC_FREQ) = 1.0f;
+                *reinterpret_cast<float*>(ADDR_DUNK_TRAFFIC_SUCC) = 1.0f;
+                LOG_INFO("[MatchController] Highlight Dunk Boost ENABLED (Maximum Posterizers)");
+            } else {
+                *reinterpret_cast<float*>(ADDR_DUNK_TRAFFIC_FREQ) = m_SavedDunkFreq;
+                *reinterpret_cast<float*>(ADDR_DUNK_TRAFFIC_SUCC) = m_SavedDunkSucc;
+                LOG_INFO("[MatchController] Highlight Dunk Boost DISABLED");
+            }
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER) {}
+    }
+
+    void MatchController::SetCleanDefense(bool enabled) {
+        m_CleanDefense = enabled;
+        __try {
+            if (enabled) {
+                m_SavedReachFoul = *reinterpret_cast<const float*>(ADDR_REACHING_FOUL);
+                *reinterpret_cast<float*>(ADDR_REACHING_FOUL) = 0.0f;
+                LOG_INFO("[MatchController] Clean Defense ENABLED (Reaching Fouls set to 0.00)");
+            } else {
+                *reinterpret_cast<float*>(ADDR_REACHING_FOUL) = m_SavedReachFoul;
+                LOG_INFO("[MatchController] Clean Defense DISABLED");
+            }
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER) {}
+    }
+
     void MatchController::Update() {
         auto& settings = FeatureManager::Get().GetSettings();
 
         // Synchronize settings with controller state
         if (settings.unlimitedStamina != m_UnlimitedStamina) {
             SetUnlimitedStamina(settings.unlimitedStamina);
+        }
+        if (settings.godShooting != m_GodShooting) {
+            SetGodShooting(settings.godShooting);
+        }
+        if (settings.highlightDunkBoost != m_HighlightDunkBoost) {
+            SetHighlightDunkBoost(settings.highlightDunkBoost);
+        }
+        if (settings.cleanDefense != m_CleanDefense) {
+            SetCleanDefense(settings.cleanDefense);
         }
 
         // Active Clock Freezing
@@ -169,6 +254,32 @@ namespace Features {
             __try {
                 *reinterpret_cast<float*>(ADDR_USER_FATIGUE) = 0.0f;
                 *reinterpret_cast<float*>(ADDR_CPU_FATIGUE) = 0.0f;
+            }
+            __except (EXCEPTION_EXECUTE_HANDLER) {}
+        }
+
+        if (m_GodShooting) {
+            __try {
+                *reinterpret_cast<float*>(ADDR_SHOT_INSIDE_USER) = 1.0f;
+                *reinterpret_cast<float*>(ADDR_SHOT_CLOSE_USER)  = 1.0f;
+                *reinterpret_cast<float*>(ADDR_SHOT_MID_USER)    = 1.0f;
+                *reinterpret_cast<float*>(ADDR_SHOT_3PT_USER)    = 1.0f;
+                *reinterpret_cast<float*>(ADDR_SHOT_LAYUP_USER)  = 1.0f;
+            }
+            __except (EXCEPTION_EXECUTE_HANDLER) {}
+        }
+
+        if (m_HighlightDunkBoost) {
+            __try {
+                *reinterpret_cast<float*>(ADDR_DUNK_TRAFFIC_FREQ) = 1.0f;
+                *reinterpret_cast<float*>(ADDR_DUNK_TRAFFIC_SUCC) = 1.0f;
+            }
+            __except (EXCEPTION_EXECUTE_HANDLER) {}
+        }
+
+        if (m_CleanDefense) {
+            __try {
+                *reinterpret_cast<float*>(ADDR_REACHING_FOUL) = 0.0f;
             }
             __except (EXCEPTION_EXECUTE_HANDLER) {}
         }

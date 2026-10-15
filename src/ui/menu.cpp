@@ -490,10 +490,42 @@ namespace UI {
                     ImGui::Separator();
                     ImGui::Spacing();
 
+                    // Shooting, Scoring & Defense Modifiers
+                    ImGui::TextColored(ImVec4(0.2f, 0.7f, 1.0f, 1.0f), "Shooting, Scoring & Defense Assists");
+                    ImGui::TextWrapped("Directly hook simulation sliders in real-time to augment user shot make rates, posterizing contact dunks, and steal aggression.");
+                    ImGui::Spacing();
+
+                    if (ImGui::Checkbox("God-Mode Shooting Assist (100% Make Rates)", &settings.godShooting)) {
+                        match.SetGodShooting(settings.godShooting);
+                        Features::FeatureManager::Get().SaveConfig();
+                    }
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip("Forces user inside, close, mid-range, 3PT, and layup success rates to 100% in simulation memory.");
+                    }
+
+                    if (ImGui::Checkbox("Highlight Dunk & Posterizer Boost", &settings.highlightDunkBoost)) {
+                        match.SetHighlightDunkBoost(settings.highlightDunkBoost);
+                        Features::FeatureManager::Get().SaveConfig();
+                    }
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip("Maximizes contact dunk frequency and success sliders in traffic for spectacular posterizing animations.");
+                    }
+
+                    if (ImGui::Checkbox("Clean Defense (Zero Reaching Fouls)", &settings.cleanDefense)) {
+                        match.SetCleanDefense(settings.cleanDefense);
+                        Features::FeatureManager::Get().SaveConfig();
+                    }
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip("Eliminates reach-in foul whistle calls when aggressively attempting steals on defense.");
+                    }
+
+                    ImGui::Spacing();
+                    ImGui::Separator();
+                    ImGui::Spacing();
+
                     // Upcoming Gameplay Roadmap features
                     ImGui::TextColored(ImVec4(0.6f, 0.7f, 0.85f, 1.0f), "Upcoming Mechanics (In Pipeline)");
-                    ImGui::Checkbox("Perfect Shot Timing Assist (Always Green)", &settings.shotMeterAlwaysGreen);
-                    ImGui::Checkbox("Unlock All Signature Moves / Animations", &settings.unlockAllAnimations);
+                    ImGui::Checkbox("Master Signature Skills / Badges (All Tier 3)", &settings.unlockAllAnimations);
 
                     ImGui::EndTabItem();
                 }
