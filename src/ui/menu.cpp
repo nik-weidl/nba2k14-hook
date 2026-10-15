@@ -520,6 +520,22 @@ namespace UI {
                         ImGui::SetTooltip("Eliminates reach-in foul whistle calls when aggressively attempting steals on defense.");
                     }
 
+                    if (ImGui::Checkbox("Immaculate Defense (Zero Fouls Mode)", &settings.zeroFoulsMode)) {
+                        match.SetZeroFoulsMode(settings.zeroFoulsMode);
+                        Features::FeatureManager::Get().SaveConfig();
+                    }
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip("Zeroes out user charging, blocking, reaching, shooting, and loose ball foul sliders in simulation memory.");
+                    }
+
+                    if (ImGui::Checkbox("Disable Late-Game AI Intentional Fouling", &settings.disableLateGameFouling)) {
+                        match.SetDisableLateGameFouling(settings.disableLateGameFouling);
+                        Features::FeatureManager::Get().SaveConfig();
+                    }
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip("Directly toggles VCFEATURECODE_DISABLE_LATE_GAME_FOULING for both teams, preventing annoying endgame AI intentional foul spam.");
+                    }
+
                     ImGui::Spacing();
                     ImGui::Separator();
                     ImGui::Spacing();

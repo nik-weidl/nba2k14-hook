@@ -20,7 +20,17 @@ namespace Features {
     static constexpr uintptr_t ADDR_SHOT_LAYUP_USER    = ADDR_SLIDER_TABLE + 0x24;
     static constexpr uintptr_t ADDR_DUNK_TRAFFIC_FREQ  = ADDR_SLIDER_TABLE + 0x2c;
     static constexpr uintptr_t ADDR_DUNK_TRAFFIC_SUCC  = ADDR_SLIDER_TABLE + 0x34;
+
+    // Foul Sliders (User)
+    static constexpr uintptr_t ADDR_CHARGING_FOUL      = ADDR_SLIDER_TABLE + 0x16c;
+    static constexpr uintptr_t ADDR_BLOCKING_FOUL      = ADDR_SLIDER_TABLE + 0x174;
     static constexpr uintptr_t ADDR_REACHING_FOUL      = ADDR_SLIDER_TABLE + 0x194;
+    static constexpr uintptr_t ADDR_SHOOTING_FOUL      = ADDR_SLIDER_TABLE + 0x19c;
+    static constexpr uintptr_t ADDR_LOOSE_BALL_FOUL    = ADDR_SLIDER_TABLE + 0x1a4;
+
+    // Late Game Intentional Fouling (VCFEATURECODE)
+    static constexpr uintptr_t ADDR_DISABLE_LATE_GAME_FOULING_TEAM0 = 0x01e85c9c;
+    static constexpr uintptr_t ADDR_DISABLE_LATE_GAME_FOULING_TEAM1 = 0x01e85ca0;
 
     MatchController& MatchController::Get() {
         static MatchController instance;
@@ -218,6 +228,48 @@ namespace Features {
         __except (EXCEPTION_EXECUTE_HANDLER) {}
     }
 
+    void MatchController::SetDisableLateGameFouling(bool disabled) {
+        m_DisableLateGameFouling = disabled;
+        __try {
+            *reinterpret_cast<uint32_t*>(ADDR_DISABLE_LATE_GAME_FOULING_TEAM0) = disabled ? 1 : 0;
+            *reinterpret_cast<uint32_t*>(ADDR_DISABLE_LATE_GAME_FOULING_TEAM1) = disabled ? 1 : 0;
+            LOG_INFO("[MatchController] Late-Game AI Intentional Fouling: %s", disabled ? "DISABLED" : "NORMAL");
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER) {}
+    }
+
+    void MatchController::SetZeroFoulsMode(bool enabled) {
+        m_ZeroFoulsMode = enabled;
+        __try {
+            if (enabled) {
+                if (!m_FoulsSaved) {
+                    m_SavedChargingFoul  = *reinterpret_cast<const float*>(ADDR_CHARGING_FOUL);
+                    m_SavedBlockingFoul  = *reinterpret_cast<const float*>(ADDR_BLOCKING_FOUL);
+                    m_SavedReachFoul     = *reinterpret_cast<const float*>(ADDR_REACHING_FOUL);
+                    m_SavedShootingFoul  = *reinterpret_cast<const float*>(ADDR_SHOOTING_FOUL);
+                    m_SavedLooseBallFoul = *reinterpret_cast<const float*>(ADDR_LOOSE_BALL_FOUL);
+                    m_FoulsSaved = true;
+                }
+                *reinterpret_cast<float*>(ADDR_CHARGING_FOUL)   = 0.0f;
+                *reinterpret_cast<float*>(ADDR_BLOCKING_FOUL)   = 0.0f;
+                *reinterpret_cast<float*>(ADDR_REACHING_FOUL)   = 0.0f;
+                *reinterpret_cast<float*>(ADDR_SHOOTING_FOUL)   = 0.0f;
+                *reinterpret_cast<float*>(ADDR_LOOSE_BALL_FOUL) = 0.0f;
+                LOG_INFO("[MatchController] Zero Fouls Mode (Immaculate Defense) ENABLED");
+            } else {
+                if (m_FoulsSaved) {
+                    *reinterpret_cast<float*>(ADDR_CHARGING_FOUL)   = m_SavedChargingFoul;
+                    *reinterpret_cast<float*>(ADDR_BLOCKING_FOUL)   = m_SavedBlockingFoul;
+                    *reinterpret_cast<float*>(ADDR_REACHING_FOUL)   = m_SavedReachFoul;
+                    *reinterpret_cast<float*>(ADDR_SHOOTING_FOUL)   = m_SavedShootingFoul;
+                    *reinterpret_cast<float*>(ADDR_LOOSE_BALL_FOUL) = m_SavedLooseBallFoul;
+                }
+                LOG_INFO("[MatchController] Zero Fouls Mode DISABLED");
+            }
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER) {}
+    }
+
     void MatchController::Update() {
         auto& settings = FeatureManager::Get().GetSettings();
 
@@ -233,6 +285,12 @@ namespace Features {
         }
         if (settings.cleanDefense != m_CleanDefense) {
             SetCleanDefense(settings.cleanDefense);
+        }
+        if (settings.disableLateGameFouling != m_DisableLateGameFouling) {
+            SetDisableLateGameFouling(settings.disableLateGameFouling);
+        }
+        if (settings.zeroFoulsMode != m_ZeroFoulsMode) {
+            SetZeroFoulsMode(settings.zeroFoulsMode);
         }
 
         // Active Clock Freezing
@@ -280,6 +338,25 @@ namespace Features {
         if (m_CleanDefense) {
             __try {
                 *reinterpret_cast<float*>(ADDR_REACHING_FOUL) = 0.0f;
+            }
+            __except (EXCEPTION_EXECUTE_HANDLER) {}
+        }
+
+        if (m_ZeroFoulsMode) {
+            __try {
+                *reinterpret_cast<float*>(ADDR_CHARGING_FOUL)   = 0.0f;
+                *reinterpret_cast<float*>(ADDR_BLOCKING_FOUL)   = 0.0f;
+                *reinterpret_cast<float*>(ADDR_REACHING_FOUL)   = 0.0f;
+                *reinterpret_cast<float*>(ADDR_SHOOTING_FOUL)   = 0.0f;
+                *reinterpret_cast<float*>(ADDR_LOOSE_BALL_FOUL) = 0.0f;
+            }
+            __except (EXCEPTION_EXECUTE_HANDLER) {}
+        }
+
+        if (m_DisableLateGameFouling) {
+            __try {
+                *reinterpret_cast<uint32_t*>(ADDR_DISABLE_LATE_GAME_FOULING_TEAM0) = 1;
+                *reinterpret_cast<uint32_t*>(ADDR_DISABLE_LATE_GAME_FOULING_TEAM1) = 1;
             }
             __except (EXCEPTION_EXECUTE_HANDLER) {}
         }

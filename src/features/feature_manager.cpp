@@ -73,6 +73,8 @@ namespace Features {
         m_Settings.godShooting = (GetPrivateProfileIntA("Gameplay", "GodShooting", m_Settings.godShooting ? 1 : 0, m_ConfigPath.c_str()) != 0);
         m_Settings.highlightDunkBoost = (GetPrivateProfileIntA("Gameplay", "HighlightDunkBoost", m_Settings.highlightDunkBoost ? 1 : 0, m_ConfigPath.c_str()) != 0);
         m_Settings.cleanDefense = (GetPrivateProfileIntA("Gameplay", "CleanDefense", m_Settings.cleanDefense ? 1 : 0, m_ConfigPath.c_str()) != 0);
+        m_Settings.zeroFoulsMode = (GetPrivateProfileIntA("Gameplay", "ZeroFoulsMode", m_Settings.zeroFoulsMode ? 1 : 0, m_ConfigPath.c_str()) != 0);
+        m_Settings.disableLateGameFouling = (GetPrivateProfileIntA("Gameplay", "DisableLateGameFouling", m_Settings.disableLateGameFouling ? 1 : 0, m_ConfigPath.c_str()) != 0);
         m_Settings.unlockAllBadges = (GetPrivateProfileIntA("Gameplay", "UnlockAllBadges", m_Settings.unlockAllBadges ? 1 : 0, m_ConfigPath.c_str()) != 0);
         m_Settings.badgesTargetMode = GetPrivateProfileIntA("Gameplay", "BadgesTargetMode", m_Settings.badgesTargetMode, m_ConfigPath.c_str());
         m_Settings.badgesTier = GetPrivateProfileIntA("Gameplay", "BadgesTier", m_Settings.badgesTier, m_ConfigPath.c_str());
@@ -107,6 +109,8 @@ namespace Features {
         WritePrivateProfileStringA("Gameplay", "GodShooting", m_Settings.godShooting ? "1" : "0", m_ConfigPath.c_str());
         WritePrivateProfileStringA("Gameplay", "HighlightDunkBoost", m_Settings.highlightDunkBoost ? "1" : "0", m_ConfigPath.c_str());
         WritePrivateProfileStringA("Gameplay", "CleanDefense", m_Settings.cleanDefense ? "1" : "0", m_ConfigPath.c_str());
+        WritePrivateProfileStringA("Gameplay", "ZeroFoulsMode", m_Settings.zeroFoulsMode ? "1" : "0", m_ConfigPath.c_str());
+        WritePrivateProfileStringA("Gameplay", "DisableLateGameFouling", m_Settings.disableLateGameFouling ? "1" : "0", m_ConfigPath.c_str());
         WritePrivateProfileStringA("Gameplay", "UnlockAllBadges", m_Settings.unlockAllBadges ? "1" : "0", m_ConfigPath.c_str());
         WritePrivateProfileStringA("Gameplay", "BadgesTargetMode", std::to_string(m_Settings.badgesTargetMode).c_str(), m_ConfigPath.c_str());
         WritePrivateProfileStringA("Gameplay", "BadgesTier", std::to_string(m_Settings.badgesTier).c_str(), m_ConfigPath.c_str());

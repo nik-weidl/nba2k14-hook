@@ -45,13 +45,24 @@ namespace Features {
         void SetCleanDefense(bool enabled);
         bool IsCleanDefense() const { return m_CleanDefense; }
 
+        // Late Game Intentional Fouling (Stops AI foul spam in clutch)
+        void SetDisableLateGameFouling(bool disabled);
+        bool IsDisableLateGameFouling() const { return m_DisableLateGameFouling; }
+
+        // Zero Fouls Mode (Immaculate Defense across all foul types)
+        void SetZeroFoulsMode(bool enabled);
+        bool IsZeroFoulsMode() const { return m_ZeroFoulsMode; }
+
     private:
         MatchController() = default;
 
         bool m_GodShooting = false;
         bool m_HighlightDunkBoost = false;
         bool m_CleanDefense = false;
+        bool m_DisableLateGameFouling = false;
+        bool m_ZeroFoulsMode = false;
         bool m_SlidersSaved = false;
+        bool m_FoulsSaved = false;
 
         float m_SavedInsideShot = 0.5f;
         float m_SavedCloseShot = 0.5f;
@@ -61,6 +72,11 @@ namespace Features {
         float m_SavedDunkFreq = 0.5f;
         float m_SavedDunkSucc = 0.5f;
         float m_SavedReachFoul = 0.5f;
+
+        float m_SavedChargingFoul = 0.5f;
+        float m_SavedBlockingFoul = 0.5f;
+        float m_SavedShootingFoul = 0.5f;
+        float m_SavedLooseBallFoul = 0.5f;
 
         bool m_FreezeShotClock = false;
         float m_FrozenShotClockValue = 24.0f;
