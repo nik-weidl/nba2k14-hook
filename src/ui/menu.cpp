@@ -1,5 +1,6 @@
 #include "menu.h"
 #include "../features/feature_manager.h"
+#include "../features/match_controller.h"
 #include "../features/vfs.h"
 #include "../hooks/speed_hook.h"
 #include "../core/logger.h"
@@ -373,13 +374,124 @@ namespace UI {
                         ImGui::Unindent(15.0f);
                     }
 
+                    // Match Clocks & Rules
+                    auto& match = Features::MatchController::Get();
+
+                    ImGui::Spacing();
+                    ImGui::Separator();
+                    ImGui::Spacing();
+
+                    ImGui::TextColored(ImVec4(0.2f, 0.7f, 1.0f, 1.0f), "Match Clocks & Shot Clock Controller");
+                    ImGui::TextWrapped("Directly manipulate live quarter game clocks, 24-second shot clocks, and player energy levels without menu delays.");
+                    ImGui::Spacing();
+
+                    if (match.IsInMatch()) {
+                        float gClock = match.GetGameClock();
+                        float sClock = match.GetShotClock();
+                        int minutes = static_cast<int>(gClock) / 60;
+                        int seconds = static_cast<int>(gClock) % 60;
+                        int tenths = static_cast<int>((gClock - static_cast<float>(static_cast<int>(gClock))) * 10.0f);
+
+                        ImGui::Text("Quarter Clock:");
+                        ImGui::SameLine();
+                        ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.4f, 1.0f), "%02d:%02d.%d", minutes, seconds, tenths);
+
+                        ImGui::SameLine(250.0f);
+                        ImGui::Text("Shot Clock:");
+                        ImGui::SameLine();
+                        
+                        ImVec4 scColor = (sClock <= 5.0f) ? ImVec4(1.0f, 0.25f, 0.25f, 1.0f) :
+                                         (sClock <= 10.0f) ? ImVec4(1.0f, 0.8f, 0.2f, 1.0f) :
+                                         ImVec4(0.2f, 1.0f, 0.4f, 1.0f);
+                        ImGui::TextColored(scColor, "%.1fs", sClock);
+
+                        // Shot Clock progress bar
+                        float scFrac = (std::min)(1.0f, (std::max)(0.0f, sClock / 24.0f));
+                        ImGui::PushStyleColor(ImGuiCol_PlotHistogram, scColor);
+                        char scBuf[32];
+                        sprintf_s(scBuf, sizeof(scBuf), "%.1f / 24.0s", sClock);
+                        ImGui::ProgressBar(scFrac, ImVec2(-1.0f, 14.0f), scBuf);
+                        ImGui::PopStyleColor();
+                    } else {
+                        ImGui::TextDisabled("Match Status: [Waiting for Match to Start - Addresses Ready]");
+                    }
+
+                    ImGui::Spacing();
+
+                    // Shot Clock Controls
+                    bool freezeSC = match.IsShotClockFrozen();
+                    if (ImGui::Checkbox("Freeze Shot Clock (Infinite Possession) [F11]", &freezeSC)) {
+                        match.SetFreezeShotClock(freezeSC);
+                    }
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip("Locks the 24-second shot clock so it never ticks down. Press F11 in-game to toggle.");
+                    }
+
+                    ImGui::SameLine();
+                    if (ImGui::Button("Reset 24s [F9]")) {
+                        match.ResetShotClock24();
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button("Reset 14s [F10]")) {
+                        match.ResetShotClock14();
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button("Buzzer Beater (2.0s)")) {
+                        match.SetShotClockPressure();
+                    }
+
+                    // Quarter Clock Controls
+                    bool freezeGC = match.IsGameClockFrozen();
+                    if (ImGui::Checkbox("Freeze Quarter Clock", &freezeGC)) {
+                        match.SetFreezeGameClock(freezeGC);
+                    }
+
+                    ImGui::SameLine();
+                    if (ImGui::Button("+1 Min")) {
+                        match.AddGameClock(60.0f);
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button("-1 Min")) {
+                        match.AddGameClock(-60.0f);
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button("Clutch 2:00")) {
+                        match.SetGameClock(120.0f);
+                    }
+
+                    ImGui::SameLine();
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.85f, 0.20f, 0.20f, 0.85f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.95f, 0.25f, 0.25f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.75f, 0.15f, 0.15f, 1.0f));
+                    if (ImGui::Button("End Quarter [F12]")) {
+                        match.InstantEndOfQuarter();
+                    }
+                    ImGui::PopStyleColor(3);
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip("Instantly ends the current quarter and triggers the buzzer / post-quarter presentation.");
+                    }
+
+                    ImGui::Spacing();
+                    ImGui::Separator();
+                    ImGui::Spacing();
+
+                    // Player Stamina & Energy Section
+                    ImGui::TextColored(ImVec4(0.2f, 0.7f, 1.0f, 1.0f), "Player Energy & Fatigue Mechanics");
+
+                    if (ImGui::Checkbox("Unlimited Player Stamina (Zero Fatigue Lock)", &settings.unlimitedStamina)) {
+                        match.SetUnlimitedStamina(settings.unlimitedStamina);
+                        Features::FeatureManager::Get().SaveConfig();
+                    }
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip("Locks the fatigue rate slider in memory to 0.00. Players never exhaust turbo sprint, never suffer 4th quarter rating drops, and never show the Gatorade icon.");
+                    }
+
                     ImGui::Spacing();
                     ImGui::Separator();
                     ImGui::Spacing();
 
                     // Upcoming Gameplay Roadmap features
                     ImGui::TextColored(ImVec4(0.6f, 0.7f, 0.85f, 1.0f), "Upcoming Mechanics (In Pipeline)");
-                    ImGui::Checkbox("Unlimited Player Stamina (Zero Fatigue Lock)", &settings.unlimitedStamina);
                     ImGui::Checkbox("Perfect Shot Timing Assist (Always Green)", &settings.shotMeterAlwaysGreen);
                     ImGui::Checkbox("Unlock All Signature Moves / Animations", &settings.unlockAllAnimations);
 

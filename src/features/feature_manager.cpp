@@ -1,4 +1,5 @@
 #include "feature_manager.h"
+#include "match_controller.h"
 #include "../core/logger.h"
 #include "../hooks/speed_hook.h"
 #include <windows.h>
@@ -18,6 +19,9 @@ namespace Features {
 
         // Initialize Game Speed Engine Hook
         Hooks::SpeedHook::Init();
+
+        // Initialize Match Controller (Clocks & Fatigue)
+        Features::MatchController::Get().Init();
 
         char exePath[MAX_PATH];
         GetModuleFileNameA(NULL, exePath, MAX_PATH);
@@ -61,6 +65,7 @@ namespace Features {
 
         m_Settings.bulletTimeKey = GetPrivateProfileIntA("Gameplay", "BulletTimeKey", m_Settings.bulletTimeKey, m_ConfigPath.c_str());
         m_Settings.bulletTimeHoldMode = (GetPrivateProfileIntA("Gameplay", "BulletTimeHoldMode", m_Settings.bulletTimeHoldMode ? 1 : 0, m_ConfigPath.c_str()) != 0);
+        m_Settings.unlimitedStamina = (GetPrivateProfileIntA("Gameplay", "UnlimitedStamina", m_Settings.unlimitedStamina ? 1 : 0, m_ConfigPath.c_str()) != 0);
 
         LOG_INFO("[FeatureManager] Loaded settings from %s (Speed: %.2fx, BulletTime: %d)",
             m_ConfigPath.c_str(), m_Settings.gameSpeed, m_Settings.bulletTimeEnabled ? 1 : 0);
@@ -88,6 +93,7 @@ namespace Features {
 
         WritePrivateProfileStringA("Gameplay", "BulletTimeKey", std::to_string(m_Settings.bulletTimeKey).c_str(), m_ConfigPath.c_str());
         WritePrivateProfileStringA("Gameplay", "BulletTimeHoldMode", m_Settings.bulletTimeHoldMode ? "1" : "0", m_ConfigPath.c_str());
+        WritePrivateProfileStringA("Gameplay", "UnlimitedStamina", m_Settings.unlimitedStamina ? "1" : "0", m_ConfigPath.c_str());
 
         LOG_INFO("[FeatureManager] Saved settings to %s", m_ConfigPath.c_str());
     }
@@ -130,6 +136,9 @@ namespace Features {
         Hooks::SpeedHook::SetSpeed(m_Settings.gameSpeed);
         Hooks::SpeedHook::SetEffectiveSpeed(targetSpeed);
         Hooks::SpeedHook::SetBulletTimeActive(bulletTimeActive);
+
+        // Update Match Controller (Clock freezing & Unlimited Stamina)
+        Features::MatchController::Get().Update();
     }
 }
 

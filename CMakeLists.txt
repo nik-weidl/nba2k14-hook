@@ -25,6 +25,7 @@ set(SOURCES
     src/main.cpp
     src/core/logger.cpp
     src/features/feature_manager.cpp
+    src/features/match_controller.cpp
     src/features/vfs.cpp
     src/hooks/d3d9_hook.cpp
     src/hooks/file_hook.cpp
