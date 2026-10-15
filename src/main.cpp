@@ -2,6 +2,7 @@
 #include "core/logger.h"
 #include "hooks/d3d9_hook.h"
 #include "hooks/file_hook.h"
+#include "hooks/speed_hook.h"
 #include "features/feature_manager.h"
 #include "features/vfs.h"
 #include <MinHook.h>
@@ -67,6 +68,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 
     case DLL_PROCESS_DETACH:
         LOG_INFO("DLL_PROCESS_DETACH: Cleaning up...");
+        Hooks::SpeedHook::Shutdown();
         Hooks::FileHook::Shutdown();
         Hooks::D3D9Hook::Shutdown();
         MH_Uninitialize();

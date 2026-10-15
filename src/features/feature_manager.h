@@ -9,6 +9,11 @@ namespace Features {
         // Gameplay settings
         bool speedHackEnabled = false;
         float gameSpeed = 1.0f;
+        bool freezeTime = false;
+        bool bulletTimeEnabled = true;
+        float bulletTimeSpeed = 0.25f;
+        int bulletTimeKey = 0x12; // VK_MENU (Alt key)
+        bool bulletTimeHoldMode = true; // true: Hold key, false: Toggle key
         
         bool unlimitedStamina = false;
         bool shotMeterAlwaysGreen = false;

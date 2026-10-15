@@ -1,6 +1,7 @@
 #include "menu.h"
 #include "../features/feature_manager.h"
 #include "../features/vfs.h"
+#include "../hooks/speed_hook.h"
 #include "../core/logger.h"
 #include <imgui.h>
 #include <imgui_impl_dx9.h>
@@ -171,6 +172,21 @@ namespace UI {
                     ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.4f, 1.0f), "| %zu/%zu Mods Active", vfs.GetEnabledModCount(), vfs.GetModCount());
                     ImGui::SameLine();
                 }
+
+                if (Hooks::SpeedHook::IsEnabled()) {
+                    float effSpeed = Hooks::SpeedHook::GetEffectiveSpeed();
+                    if (Hooks::SpeedHook::IsBulletTimeActive()) {
+                        ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.2f, 1.0f), "| Slomo: %.2fx", effSpeed);
+                        ImGui::SameLine();
+                    } else if (effSpeed == 0.0f) {
+                        ImGui::TextColored(ImVec4(0.3f, 0.8f, 1.0f, 1.0f), "| Time Frozen");
+                        ImGui::SameLine();
+                    } else if (effSpeed != 1.0f) {
+                        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "| Speed: %.2fx", effSpeed);
+                        ImGui::SameLine();
+                    }
+                }
+
                 ImGui::TextDisabled("| [F8] Menu");
                 ImGui::End();
             }
@@ -234,22 +250,137 @@ namespace UI {
                 // Tab: Gameplay
                 if (ImGui::BeginTabItem("Gameplay")) {
                     ImGui::Spacing();
-                    ImGui::TextColored(ImVec4(0.2f, 0.7f, 1.0f, 1.0f), "Gameplay Overrides & Mechanics");
+                    ImGui::TextColored(ImVec4(0.2f, 0.7f, 1.0f, 1.0f), "Game Speed & Physics Clock Engine");
+                    ImGui::TextWrapped("Control the real-time simulation tick rate of player animations, ball physics, and game clocks without desyncing audio or rendering.");
                     ImGui::Separator();
                     ImGui::Spacing();
 
-                    ImGui::Checkbox("Game Speed Multiplier", &settings.speedHackEnabled);
+                    // Speed Status Telemetry
+                    float effSpeed = Hooks::SpeedHook::GetEffectiveSpeed();
+                    bool isSpeedActive = Hooks::SpeedHook::IsEnabled();
+                    bool isBulletActive = Hooks::SpeedHook::IsBulletTimeActive();
+
+                    ImGui::Text("Active Simulation Rate:");
+                    ImGui::SameLine();
+                    if (!isSpeedActive || effSpeed == 1.0f) {
+                        ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.3f, 1.0f), "1.00x [NORMAL TIME]");
+                    } else if (isBulletActive) {
+                        ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.2f, 1.0f), "%.2fx [BULLET-TIME ACTIVE]", effSpeed);
+                    } else if (settings.freezeTime) {
+                        ImGui::TextColored(ImVec4(0.3f, 0.8f, 1.0f, 1.0f), "0.00x [TIME FROZEN]");
+                    } else if (effSpeed < 1.0f) {
+                        ImGui::TextColored(ImVec4(1.0f, 0.65f, 0.2f, 1.0f), "%.2fx [SLOW MOTION]", effSpeed);
+                    } else {
+                        ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.2f, 1.0f), "%.2fx [TURBO FAST-FORWARD]", effSpeed);
+                    }
+
+                    ImGui::Spacing();
+
+                    // Game Speed Multiplier
+                    if (ImGui::Checkbox("Enable Custom Game Speed Multiplier", &settings.speedHackEnabled)) {
+                        Features::FeatureManager::Get().SaveConfig();
+                    }
+
                     if (settings.speedHackEnabled) {
-                        ImGui::SliderFloat("Speed Scale", &settings.gameSpeed, 0.1f, 3.0f, "%.2fx");
-                        if (ImGui::Button("Reset to Normal (1.0x)")) {
-                            settings.gameSpeed = 1.0f;
+                        ImGui::Indent(15.0f);
+                        if (ImGui::SliderFloat("Speed Scale", &settings.gameSpeed, 0.10f, 3.00f, "%.2fx")) {
+                            Features::FeatureManager::Get().SaveConfig();
                         }
+
+                        // Presets
+                        ImGui::TextDisabled("Quick Presets:");
+                        ImGui::SameLine();
+                        if (ImGui::SmallButton("0.25x (Super Slomo)")) { settings.gameSpeed = 0.25f; Features::FeatureManager::Get().SaveConfig(); }
+                        ImGui::SameLine();
+                        if (ImGui::SmallButton("0.50x (Half)")) { settings.gameSpeed = 0.50f; Features::FeatureManager::Get().SaveConfig(); }
+                        ImGui::SameLine();
+                        if (ImGui::SmallButton("1.00x (Normal)")) { settings.gameSpeed = 1.00f; Features::FeatureManager::Get().SaveConfig(); }
+                        ImGui::SameLine();
+                        if (ImGui::SmallButton("1.50x (Fast)")) { settings.gameSpeed = 1.50f; Features::FeatureManager::Get().SaveConfig(); }
+                        ImGui::SameLine();
+                        if (ImGui::SmallButton("2.00x (Turbo)")) { settings.gameSpeed = 2.00f; Features::FeatureManager::Get().SaveConfig(); }
+
+                        if (ImGui::Checkbox("Freeze Time (0.00x - Pause Gameplay Only)", &settings.freezeTime)) {
+                            // Keeps menus and UI fully responsive while pausing gameplay
+                        }
+                        if (ImGui::IsItemHovered()) {
+                            ImGui::SetTooltip("Completely pauses gameplay motion, animations, and game clock while keeping the camera and overlay fully interactive.");
+                        }
+
+                        ImGui::Unindent(15.0f);
                     }
 
                     ImGui::Spacing();
                     ImGui::Separator();
-                    ImGui::Checkbox("Unlimited Player Stamina (Zero Fatigue)", &settings.unlimitedStamina);
-                    ImGui::Checkbox("Perfect Shot Timing Assist", &settings.shotMeterAlwaysGreen);
+                    ImGui::Spacing();
+
+                    // Cinematic Bullet Time
+                    ImGui::TextColored(ImVec4(0.95f, 0.6f, 0.2f, 1.0f), "Cinematic Bullet-Time (In-Game Slomo Hotkey)");
+                    ImGui::TextWrapped("Hold or toggle a hotkey during live gameplay to instantly slow down time on dunks, fast breaks, blocks, and buzzer-beaters.");
+
+                    if (ImGui::Checkbox("Enable Bullet-Time Hotkey", &settings.bulletTimeEnabled)) {
+                        Features::FeatureManager::Get().SaveConfig();
+                    }
+
+                    if (settings.bulletTimeEnabled) {
+                        ImGui::Indent(15.0f);
+                        if (ImGui::SliderFloat("Bullet-Time Speed", &settings.bulletTimeSpeed, 0.10f, 0.75f, "%.2fx")) {
+                            Features::FeatureManager::Get().SaveConfig();
+                        }
+
+                        // Key selector
+                        static const char* s_KeyNames[] = {
+                            "Left Alt (VK_MENU)",
+                            "F6 Key",
+                            "F7 Key",
+                            "Middle Mouse Button",
+                            "Mouse Button 4 (Thumb Back)",
+                            "Mouse Button 5 (Thumb Forward)",
+                            "Left Shift",
+                            "Caps Lock",
+                            "Tilde (~)"
+                        };
+                        static const int s_KeyVKs[] = {
+                            0x12, 0x75, 0x76, 0x04, 0x05, 0x06, 0xA0, 0x14, 0xC0
+                        };
+
+                        int selectedKeyIdx = 0;
+                        for (int i = 0; i < IM_ARRAYSIZE(s_KeyVKs); i++) {
+                            if (s_KeyVKs[i] == settings.bulletTimeKey) {
+                                selectedKeyIdx = i;
+                                break;
+                            }
+                        }
+
+                        if (ImGui::Combo("Bullet-Time Hotkey", &selectedKeyIdx, s_KeyNames, IM_ARRAYSIZE(s_KeyNames))) {
+                            settings.bulletTimeKey = s_KeyVKs[selectedKeyIdx];
+                            Features::FeatureManager::Get().SaveConfig();
+                        }
+
+                        // Mode: Hold vs Toggle
+                        ImGui::Text("Activation Mode:");
+                        ImGui::SameLine();
+                        if (ImGui::RadioButton("Hold Key", settings.bulletTimeHoldMode == true)) {
+                            settings.bulletTimeHoldMode = true;
+                            Features::FeatureManager::Get().SaveConfig();
+                        }
+                        ImGui::SameLine();
+                        if (ImGui::RadioButton("Press to Toggle", settings.bulletTimeHoldMode == false)) {
+                            settings.bulletTimeHoldMode = false;
+                            Features::FeatureManager::Get().SaveConfig();
+                        }
+
+                        ImGui::Unindent(15.0f);
+                    }
+
+                    ImGui::Spacing();
+                    ImGui::Separator();
+                    ImGui::Spacing();
+
+                    // Upcoming Gameplay Roadmap features
+                    ImGui::TextColored(ImVec4(0.6f, 0.7f, 0.85f, 1.0f), "Upcoming Mechanics (In Pipeline)");
+                    ImGui::Checkbox("Unlimited Player Stamina (Zero Fatigue Lock)", &settings.unlimitedStamina);
+                    ImGui::Checkbox("Perfect Shot Timing Assist (Always Green)", &settings.shotMeterAlwaysGreen);
                     ImGui::Checkbox("Unlock All Signature Moves / Animations", &settings.unlockAllAnimations);
 
                     ImGui::EndTabItem();

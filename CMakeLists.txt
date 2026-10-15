@@ -28,6 +28,7 @@ set(SOURCES
     src/features/vfs.cpp
     src/hooks/d3d9_hook.cpp
     src/hooks/file_hook.cpp
+    src/hooks/speed_hook.cpp
     src/hooks/wndproc_hook.cpp
     src/ui/menu.cpp
 
