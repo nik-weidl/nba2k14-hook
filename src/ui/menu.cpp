@@ -3,6 +3,7 @@
 #include "../features/match_controller.h"
 #include "../features/vfs.h"
 #include "../hooks/speed_hook.h"
+#include "../hooks/badge_hook.h"
 #include "../core/logger.h"
 #include <imgui.h>
 #include <imgui_impl_dx9.h>
@@ -523,9 +524,105 @@ namespace UI {
                     ImGui::Separator();
                     ImGui::Spacing();
 
-                    // Upcoming Gameplay Roadmap features
-                    ImGui::TextColored(ImVec4(0.6f, 0.7f, 0.85f, 1.0f), "Upcoming Mechanics (In Pipeline)");
-                    ImGui::Checkbox("Master Signature Skills / Badges (All Tier 3)", &settings.unlockAllAnimations);
+                    // Master Signature Skills / Badges Unlocker
+                    ImGui::TextColored(ImVec4(0.2f, 0.7f, 1.0f, 1.0f), "Master Signature Skills (Unlock All 38 Badges)");
+                    ImGui::TextWrapped("Intersects the game's internal ability evaluator to grant all 38 Signature Skills simultaneously (Posterizer, Ankle Breaker, Deadeye, Lockdown Defender, Dimer, Acrobat, etc.).");
+                    ImGui::Spacing();
+
+                    if (ImGui::Checkbox("Enable Master Signature Skills Unlocker", &settings.unlockAllBadges)) {
+                        Hooks::BadgeHook::SetEnabled(settings.unlockAllBadges);
+                        Features::FeatureManager::Get().SaveConfig();
+                    }
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip("When active, players bypass the vanilla 5-skill limit and behave as if all 38 signature skills are equipped at the chosen tier.");
+                    }
+
+                    if (settings.unlockAllBadges) {
+                        ImGui::Indent(15.0f);
+
+                        // Target Selector
+                        static const char* s_TargetNames[] = {
+                            "User Team Only (All 5 Active Teammates)",
+                            "Controlled Player Only (Active User P1/P2)",
+                            "All Players on Court (Full Arcade Chaos)"
+                        };
+                        if (ImGui::Combo("Badge Recipients", &settings.badgesTargetMode, s_TargetNames, IM_ARRAYSIZE(s_TargetNames))) {
+                            Hooks::BadgeHook::SetTargetMode(settings.badgesTargetMode);
+                            Features::FeatureManager::Get().SaveConfig();
+                        }
+
+                        // Tier Selector
+                        static const char* s_TierNames[] = {
+                            "Tier 1: Bronze",
+                            "Tier 2: Silver",
+                            "Tier 3: Gold (Hall of Fame Tier)"
+                        };
+                        int currentTierIdx = settings.badgesTier - 1;
+                        if (currentTierIdx < 0 || currentTierIdx > 2) currentTierIdx = 2; // default Gold
+
+                        if (ImGui::Combo("Badge Tier Level", &currentTierIdx, s_TierNames, IM_ARRAYSIZE(s_TierNames))) {
+                            settings.badgesTier = currentTierIdx + 1;
+                            Hooks::BadgeHook::SetTier(settings.badgesTier);
+                            Features::FeatureManager::Get().SaveConfig();
+                        }
+
+                        // Showcase list of unlocked skills
+                        if (ImGui::TreeNodeEx("View All 38 Granted Signature Skills", ImGuiTreeNodeFlags_Framed)) {
+                            static const struct { const char* name; const char* cat; } s_BadgeCatalog[] = {
+                                { "Posterizer", "Finishing" },
+                                { "Highlight Film", "Finishing" },
+                                { "Finisher", "Finishing" },
+                                { "Acrobat", "Finishing" },
+                                { "Hustle Points", "Finishing" },
+                                { "Alley-Ooper", "Finishing" },
+                                { "Deadeye", "Shooting" },
+                                { "Corner Specialist", "Shooting" },
+                                { "Shot Creator", "Shooting" },
+                                { "Hot Pocket", "Shooting" },
+                                { "Post Proficiency", "Inside" },
+                                { "Post Playmaker", "Inside" },
+                                { "Punisher", "Inside" },
+                                { "Ankle Breaker", "Playmaking" },
+                                { "Dimer", "Playmaking" },
+                                { "Pick & Roll Passer", "Playmaking" },
+                                { "Flashy Passer", "Playmaking" },
+                                { "Break Starter", "Playmaking" },
+                                { "Floor General", "Playmaking" },
+                                { "One Man Fastbreak", "Athleticism" },
+                                { "LeBron Coast to Coast", "Athleticism" },
+                                { "Lockdown Defender", "Defense" },
+                                { "Pick Pocket", "Defense" },
+                                { "Active Hands", "Defense" },
+                                { "Interceptor", "Defense" },
+                                { "Eraser", "Defense" },
+                                { "Chase Down Artist", "Defense" },
+                                { "Charge Card", "Defense" },
+                                { "Tenacious Rebounder", "Rebounding" },
+                                { "Scrapper", "Rebounding" },
+                                { "Brick Wall", "Team" },
+                                { "Screen Outlet", "Team" },
+                                { "Screen Slipper", "Team" },
+                                { "On Court Coach", "Mental" },
+                                { "Microwave", "Mental" },
+                                { "Closer", "Mental" },
+                                { "Endurer", "Mental" },
+                                { "Mr. Consistency", "Mental" }
+                            };
+
+                            ImGui::Columns(3, "badge_grid", false);
+                            for (int i = 0; i < IM_ARRAYSIZE(s_BadgeCatalog); i++) {
+                                ImGui::TextColored(ImVec4(1.0f, 0.82f, 0.2f, 1.0f), "[GOLD]");
+                                ImGui::SameLine();
+                                ImGui::Text("%s", s_BadgeCatalog[i].name);
+                                ImGui::NextColumn();
+                            }
+                            ImGui::Columns(1);
+
+                            ImGui::TreePop();
+                        }
+
+                        ImGui::Unindent(15.0f);
+                    }
 
                     ImGui::EndTabItem();
                 }

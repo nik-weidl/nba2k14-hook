@@ -2,6 +2,7 @@
 #include "match_controller.h"
 #include "../core/logger.h"
 #include "../hooks/speed_hook.h"
+#include "../hooks/badge_hook.h"
 #include <windows.h>
 #include <sstream>
 
@@ -19,6 +20,9 @@ namespace Features {
 
         // Initialize Game Speed Engine Hook
         Hooks::SpeedHook::Init();
+
+        // Initialize Signature Skills Master Unlocker Hook
+        Hooks::BadgeHook::Init();
 
         // Initialize Match Controller (Clocks & Fatigue)
         Features::MatchController::Get().Init();
@@ -69,6 +73,9 @@ namespace Features {
         m_Settings.godShooting = (GetPrivateProfileIntA("Gameplay", "GodShooting", m_Settings.godShooting ? 1 : 0, m_ConfigPath.c_str()) != 0);
         m_Settings.highlightDunkBoost = (GetPrivateProfileIntA("Gameplay", "HighlightDunkBoost", m_Settings.highlightDunkBoost ? 1 : 0, m_ConfigPath.c_str()) != 0);
         m_Settings.cleanDefense = (GetPrivateProfileIntA("Gameplay", "CleanDefense", m_Settings.cleanDefense ? 1 : 0, m_ConfigPath.c_str()) != 0);
+        m_Settings.unlockAllBadges = (GetPrivateProfileIntA("Gameplay", "UnlockAllBadges", m_Settings.unlockAllBadges ? 1 : 0, m_ConfigPath.c_str()) != 0);
+        m_Settings.badgesTargetMode = GetPrivateProfileIntA("Gameplay", "BadgesTargetMode", m_Settings.badgesTargetMode, m_ConfigPath.c_str());
+        m_Settings.badgesTier = GetPrivateProfileIntA("Gameplay", "BadgesTier", m_Settings.badgesTier, m_ConfigPath.c_str());
 
         LOG_INFO("[FeatureManager] Loaded settings from %s (Speed: %.2fx, BulletTime: %d)",
             m_ConfigPath.c_str(), m_Settings.gameSpeed, m_Settings.bulletTimeEnabled ? 1 : 0);
@@ -100,6 +107,9 @@ namespace Features {
         WritePrivateProfileStringA("Gameplay", "GodShooting", m_Settings.godShooting ? "1" : "0", m_ConfigPath.c_str());
         WritePrivateProfileStringA("Gameplay", "HighlightDunkBoost", m_Settings.highlightDunkBoost ? "1" : "0", m_ConfigPath.c_str());
         WritePrivateProfileStringA("Gameplay", "CleanDefense", m_Settings.cleanDefense ? "1" : "0", m_ConfigPath.c_str());
+        WritePrivateProfileStringA("Gameplay", "UnlockAllBadges", m_Settings.unlockAllBadges ? "1" : "0", m_ConfigPath.c_str());
+        WritePrivateProfileStringA("Gameplay", "BadgesTargetMode", std::to_string(m_Settings.badgesTargetMode).c_str(), m_ConfigPath.c_str());
+        WritePrivateProfileStringA("Gameplay", "BadgesTier", std::to_string(m_Settings.badgesTier).c_str(), m_ConfigPath.c_str());
 
         LOG_INFO("[FeatureManager] Saved settings to %s", m_ConfigPath.c_str());
     }
@@ -142,6 +152,11 @@ namespace Features {
         Hooks::SpeedHook::SetSpeed(m_Settings.gameSpeed);
         Hooks::SpeedHook::SetEffectiveSpeed(targetSpeed);
         Hooks::SpeedHook::SetBulletTimeActive(bulletTimeActive);
+
+        // Update Signature Skills Master Unlocker Hook
+        Hooks::BadgeHook::SetEnabled(m_Settings.unlockAllBadges);
+        Hooks::BadgeHook::SetTargetMode(m_Settings.badgesTargetMode);
+        Hooks::BadgeHook::SetTier(m_Settings.badgesTier);
 
         // Update Match Controller (Clock freezing & Unlimited Stamina)
         Features::MatchController::Get().Update();

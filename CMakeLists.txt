@@ -27,6 +27,7 @@ set(SOURCES
     src/features/feature_manager.cpp
     src/features/match_controller.cpp
     src/features/vfs.cpp
+    src/hooks/badge_hook.cpp
     src/hooks/d3d9_hook.cpp
     src/hooks/file_hook.cpp
     src/hooks/speed_hook.cpp

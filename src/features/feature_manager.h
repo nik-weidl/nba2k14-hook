@@ -19,6 +19,9 @@ namespace Features {
         bool godShooting = false;
         bool highlightDunkBoost = false;
         bool cleanDefense = false;
+        bool unlockAllBadges = false;
+        int badgesTargetMode = 0; // 0 = User Team, 1 = Active User Player, 2 = All Players (Arcade)
+        int badgesTier = 3;       // 1 = Bronze, 2 = Silver, 3 = Gold
         bool freezeShotClock = false;
         bool freezeGameClock = false;
         bool shotMeterAlwaysGreen = false;
