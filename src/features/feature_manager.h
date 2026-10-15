@@ -29,6 +29,7 @@ namespace Features {
         bool shotMeterAlwaysGreen = false;
         bool unlockAllAnimations = false;
         bool freeCameraEnabled = false;
+        bool cameraFovOverride = false;
         float cameraFov = 60.0f;
         
         // Internal Debug Toggles

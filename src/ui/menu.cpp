@@ -4,6 +4,7 @@
 #include "../features/vfs.h"
 #include "../hooks/speed_hook.h"
 #include "../hooks/badge_hook.h"
+#include "../hooks/camera_hook.h"
 #include "../core/logger.h"
 #include <imgui.h>
 #include <imgui_impl_dx9.h>
@@ -646,19 +647,81 @@ namespace UI {
                 // Tab: Camera & Visuals
                 if (ImGui::BeginTabItem("Camera & Visuals")) {
                     ImGui::Spacing();
-                    ImGui::TextColored(ImVec4(0.2f, 0.7f, 1.0f, 1.0f), "Camera Controls & Visuals");
+                    ImGui::TextColored(ImVec4(0.2f, 0.7f, 1.0f, 1.0f), "Dynamic Camera & Field of View (FOV) Engine");
+                    ImGui::TextWrapped("Directly hooks the engine's CAMERA_LENS evaluation function (0x00452490) to scale horizontal and vertical perspective across all in-game cameras (Broadcast, 2K, Drive, High, Nosebleed, Replays).");
                     ImGui::Separator();
                     ImGui::Spacing();
 
-                    ImGui::Checkbox("Enable Free Camera Mode", &settings.freeCameraEnabled);
-                    ImGui::SliderFloat("Field of View (FOV)", &settings.cameraFov, 30.0f, 120.0f, "%.1f deg");
-                    if (ImGui::Button("Reset Camera FOV (60)")) {
-                        settings.cameraFov = 60.0f;
+                    if (ImGui::Checkbox("Enable Dynamic FOV Override", &settings.cameraFovOverride)) {
+                        Hooks::CameraHook::SetFovOverride(settings.cameraFovOverride);
+                        Features::FeatureManager::Get().SaveConfig();
+                    }
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip("When active, replaces the camera's default FOV with your custom angle in real time.");
+                    }
+
+                    if (settings.cameraFovOverride) {
+                        ImGui::Indent(15.0f);
+
+                        if (ImGui::SliderFloat("Field of View", &settings.cameraFov, 30.0f, 120.0f, "%.1f deg")) {
+                            Hooks::CameraHook::SetFovDegrees(settings.cameraFov);
+                            Features::FeatureManager::Get().SaveConfig();
+                        }
+
+                        // Presets
+                        ImGui::Text("Quick Presets:");
+                        ImGui::SameLine();
+                        if (ImGui::Button("Close (45 deg)")) {
+                            settings.cameraFov = 45.0f;
+                            Hooks::CameraHook::SetFovDegrees(settings.cameraFov);
+                            Features::FeatureManager::Get().SaveConfig();
+                        }
+                        ImGui::SameLine();
+                        if (ImGui::Button("Default (60 deg)")) {
+                            settings.cameraFov = 60.0f;
+                            Hooks::CameraHook::SetFovDegrees(settings.cameraFov);
+                            Features::FeatureManager::Get().SaveConfig();
+                        }
+                        ImGui::SameLine();
+                        if (ImGui::Button("Broadcast Wide (75 deg)")) {
+                            settings.cameraFov = 75.0f;
+                            Hooks::CameraHook::SetFovDegrees(settings.cameraFov);
+                            Features::FeatureManager::Get().SaveConfig();
+                        }
+                        ImGui::SameLine();
+                        if (ImGui::Button("Cinematic (90 deg)")) {
+                            settings.cameraFov = 90.0f;
+                            Hooks::CameraHook::SetFovDegrees(settings.cameraFov);
+                            Features::FeatureManager::Get().SaveConfig();
+                        }
+                        ImGui::SameLine();
+                        if (ImGui::Button("Fish-Eye (110 deg)")) {
+                            settings.cameraFov = 110.0f;
+                            Hooks::CameraHook::SetFovDegrees(settings.cameraFov);
+                            Features::FeatureManager::Get().SaveConfig();
+                        }
+
+                        // Math readouts
+                        float radH = settings.cameraFov * (3.14159265f / 180.0f);
+                        float radV = radH * (9.0f / 16.0f);
+                        ImGui::TextDisabled("Viewport Radians: Horiz: %.3f rad | Vert: %.3f rad (Aspect: 16:9)", radH, radV);
+
+                        ImGui::Unindent(15.0f);
                     }
 
                     ImGui::Spacing();
                     ImGui::Separator();
-                    ImGui::Checkbox("Enable Engine Debug Visuals (VCFEATURECODE)", &settings.enableEngineDebugText);
+                    ImGui::Spacing();
+
+                    // Developer Diagnostics
+                    ImGui::TextColored(ImVec4(0.2f, 0.7f, 1.0f, 1.0f), "Engine Diagnostics & Telemetry");
+                    if (ImGui::Checkbox("Enable Engine Debug Visuals (VCFEATURECODE)", &settings.enableEngineDebugText)) {
+                        Hooks::CameraHook::SetEngineDebugOverlay(settings.enableEngineDebugText);
+                        Features::FeatureManager::Get().SaveConfig();
+                    }
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip("Directly enables the internal 2K developer debug overlay and gameplay telemetry.");
+                    }
 
                     ImGui::EndTabItem();
                 }

@@ -3,6 +3,7 @@
 #include "../core/logger.h"
 #include "../hooks/speed_hook.h"
 #include "../hooks/badge_hook.h"
+#include "../hooks/camera_hook.h"
 #include <windows.h>
 #include <sstream>
 
@@ -23,6 +24,9 @@ namespace Features {
 
         // Initialize Signature Skills Master Unlocker Hook
         Hooks::BadgeHook::Init();
+
+        // Initialize Camera Lens & FOV Hook
+        Hooks::CameraHook::Init();
 
         // Initialize Match Controller (Clocks & Fatigue)
         Features::MatchController::Get().Init();
@@ -79,6 +83,16 @@ namespace Features {
         m_Settings.badgesTargetMode = GetPrivateProfileIntA("Gameplay", "BadgesTargetMode", m_Settings.badgesTargetMode, m_ConfigPath.c_str());
         m_Settings.badgesTier = GetPrivateProfileIntA("Gameplay", "BadgesTier", m_Settings.badgesTier, m_ConfigPath.c_str());
 
+        // Camera & Visuals
+        m_Settings.cameraFovOverride = (GetPrivateProfileIntA("Camera", "FovOverride", m_Settings.cameraFovOverride ? 1 : 0, m_ConfigPath.c_str()) != 0);
+        char fovBuf[32];
+        if (GetPrivateProfileStringA("Camera", "FOV", "60.0", fovBuf, sizeof(fovBuf), m_ConfigPath.c_str()) > 0) {
+            m_Settings.cameraFov = static_cast<float>(atof(fovBuf));
+            if (m_Settings.cameraFov < 25.0f) m_Settings.cameraFov = 25.0f;
+            if (m_Settings.cameraFov > 130.0f) m_Settings.cameraFov = 130.0f;
+        }
+        m_Settings.enableEngineDebugText = (GetPrivateProfileIntA("Camera", "EngineDebugText", m_Settings.enableEngineDebugText ? 1 : 0, m_ConfigPath.c_str()) != 0);
+
         LOG_INFO("[FeatureManager] Loaded settings from %s (Speed: %.2fx, BulletTime: %d)",
             m_ConfigPath.c_str(), m_Settings.gameSpeed, m_Settings.bulletTimeEnabled ? 1 : 0);
     }
@@ -114,6 +128,13 @@ namespace Features {
         WritePrivateProfileStringA("Gameplay", "UnlockAllBadges", m_Settings.unlockAllBadges ? "1" : "0", m_ConfigPath.c_str());
         WritePrivateProfileStringA("Gameplay", "BadgesTargetMode", std::to_string(m_Settings.badgesTargetMode).c_str(), m_ConfigPath.c_str());
         WritePrivateProfileStringA("Gameplay", "BadgesTier", std::to_string(m_Settings.badgesTier).c_str(), m_ConfigPath.c_str());
+
+        // Camera & Visuals
+        WritePrivateProfileStringA("Camera", "FovOverride", m_Settings.cameraFovOverride ? "1" : "0", m_ConfigPath.c_str());
+        char fovStr[32];
+        sprintf_s(fovStr, sizeof(fovStr), "%.1f", m_Settings.cameraFov);
+        WritePrivateProfileStringA("Camera", "FOV", fovStr, m_ConfigPath.c_str());
+        WritePrivateProfileStringA("Camera", "EngineDebugText", m_Settings.enableEngineDebugText ? "1" : "0", m_ConfigPath.c_str());
 
         LOG_INFO("[FeatureManager] Saved settings to %s", m_ConfigPath.c_str());
     }
@@ -164,6 +185,11 @@ namespace Features {
 
         // Update Match Controller (Clock freezing & Unlimited Stamina)
         Features::MatchController::Get().Update();
+
+        // Update Camera Lens & FOV Hook
+        Hooks::CameraHook::SetFovOverride(m_Settings.cameraFovOverride);
+        Hooks::CameraHook::SetFovDegrees(m_Settings.cameraFov);
+        Hooks::CameraHook::SetEngineDebugOverlay(m_Settings.enableEngineDebugText);
     }
 }
 
